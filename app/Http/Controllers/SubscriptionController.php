@@ -129,7 +129,7 @@ class SubscriptionController extends Controller
                 'email' => $user->email,
             ],
             'callbacks' => [
-                'finish' => 'http://localhost:5173/membership?status=success',
+                'finish' => env('FRONTEND_URL', url('/')) . '/membership?status=success',
             ]
         ];
 
