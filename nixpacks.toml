@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["php82", "php82Packages.composer", "php82Extensions.pdo_mysql", "php82Extensions.bcmath", "nodejs"]
+nixPkgs = ["php82", "php82Packages.composer", "php82Extensions.pdo_mysql", "php82Extensions.pdo_pgsql", "php82Extensions.pdo_sqlite", "php82Extensions.bcmath", "nodejs"]
 
 [phases.build]
 dependsOn = ["setup"]
