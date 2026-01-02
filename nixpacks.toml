@@ -1,0 +1,9 @@
+[phases.setup]
+nixPkgs = ["...", "php82", "php82Packages.composer", "nginx"]
+
+[phases.build]
+dependsOn = ["setup"]
+cmds = ["composer install --no-dev --optimize-autoloader", "php artisan config:cache", "php artisan route:cache"]
+
+[start]
+cmd = "php artisan migrate --force && php-fpm -D && nginx -g 'daemon off;'"
