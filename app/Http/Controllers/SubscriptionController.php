@@ -33,8 +33,8 @@ class SubscriptionController extends Controller
                 return response()->json(['success' => false, 'message' => 'Subscription not found'], 404);
             }
 
-            // The response from Midtrans is an object
-            $transactionStatus = $status->transaction_status;
+            // Ensure status is treated as an object as returned by Midtrans SDK
+            $transactionStatus = is_object($status) ? $status->transaction_status : $status['transaction_status'];
 
             if ($transactionStatus == 'settlement' || $transactionStatus == 'capture') {
                 // Activate subscription
