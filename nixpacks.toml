@@ -1,9 +1,14 @@
 [phases.setup]
-nixPkgs = ["...", "php82", "php82Packages.composer", "nginx"]
+nixPkgs = ["php82", "php82Packages.composer", "php82Extensions.pdo_mysql", "php82Extensions.bcmath"]
 
 [phases.build]
 dependsOn = ["setup"]
-cmds = ["composer install --no-dev --optimize-autoloader", "php artisan config:cache", "php artisan route:cache"]
+cmds = [
+    "composer install --no-dev --optimize-autoloader",
+    "php artisan config:cache",
+    "php artisan route:cache",
+    "php artisan view:cache"
+]
 
 [start]
-cmd = "php artisan migrate --force && php-fpm -D && nginx -g 'daemon off;'"
+cmd = "php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=${PORT:-8080}"
