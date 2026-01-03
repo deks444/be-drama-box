@@ -80,6 +80,7 @@ class AuthController extends Controller
             ->exists();
 
         // Hapus token lama agar hanya 1 device yang bisa login (Single Session)
+        \Log::info("User login detected, deleting old tokens for: " . $user->email);
         Auth::logout(); // Membersihkan session lokal jika ada
         $user->tokens()->delete();
 
