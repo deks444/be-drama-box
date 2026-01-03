@@ -26,15 +26,33 @@ class SubscriptionController extends Controller
         \Midtrans\Config::$isProduction = config('services.midtrans.is_production');
 
         try {
-            $status = \Midtrans\Transaction::status($orderId);
-            $subscription = Subscription::where('order_id', $orderId)->first();
+            try {
+                $status = \Midtrans\Transaction::status($orderId);
+            } catch (\Exception $midtransError) {
+                // Jika Midtrans mengembalikan 404 (tidak ditemukan)
+                if (str_contains($midtransError->getMessage(), '404')) {
+                    $subscription = Subscription::where('order_id', $orderId)->first();
+                    if ($subscription && $subscription->payment_status === 'pending') {
+                        // Opsi 1: Hapus otomatis jika tidak ditemukan di Midtrans
+                        $subscription->delete();
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Transaksi tidak ditemukan di sistem Midtrans. Data lokal telah dibersihkan.',
+                            'status' => 'not_found'
+                        ]);
+                    }
+                }
+                throw $midtransError;
+            }
 
+            $subscription = Subscription::where('order_id', $orderId)->first();
             if (!$subscription) {
                 return response()->json(['success' => false, 'message' => 'Subscription not found'], 404);
             }
 
             // Ensure status is treated as an object as returned by Midtrans SDK
             $transactionStatus = is_object($status) ? $status->transaction_status : $status['transaction_status'];
+
 
             if ($transactionStatus == 'settlement' || $transactionStatus == 'capture') {
                 // Activate subscription
@@ -51,6 +69,9 @@ class SubscriptionController extends Controller
                         break;
                     case 'monthly':
                         $expiresAt = now()->addMonth();
+                        break;
+                    case 'permanent':
+                        $expiresAt = now()->addYears(100);
                         break;
                     default:
                         $expiresAt = now()->addDay();
