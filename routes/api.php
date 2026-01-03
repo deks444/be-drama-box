@@ -9,6 +9,19 @@ Route::post('/login', [AuthController::class, 'login'])->name('login');
 
 Route::post('/midtrans/webhook', [\App\Http\Controllers\MidtransController::class, 'webhook']);
 
+// Admin routes
+Route::prefix('admin')->group(function () {
+    Route::post('/login', [\App\Http\Controllers\AdminController::class, 'login']);
+
+    // Protected admin routes
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/logout', [\App\Http\Controllers\AdminController::class, 'logout']);
+        Route::get('/stats', [\App\Http\Controllers\AdminController::class, 'getStats']);
+        Route::get('/users/search', [\App\Http\Controllers\AdminController::class, 'searchUsers']);
+        Route::post('/users/grant-premium', [\App\Http\Controllers\AdminController::class, 'grantPremium']);
+    });
+});
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
