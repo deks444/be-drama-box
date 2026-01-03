@@ -61,6 +61,9 @@ class MidtransController extends Controller
             case 'monthly':
                 $expiresAt = now()->addMonth();
                 break;
+            case 'permanent':
+                $expiresAt = now()->addYears(100);
+                break;
             default:
                 $expiresAt = now()->addDay();
         }
