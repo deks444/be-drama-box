@@ -80,6 +80,7 @@ class AuthController extends Controller
             ->exists();
 
         // Hapus token lama agar hanya 1 device yang bisa login (Single Session)
+        Auth::logout(); // Membersihkan session lokal jika ada
         $user->tokens()->delete();
 
         $token = $user->createToken('auth_token')->plainTextToken;
