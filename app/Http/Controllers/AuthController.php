@@ -79,6 +79,9 @@ class AuthController extends Controller
             ->where('expires_at', '>', now())
             ->exists();
 
+        // Hapus token lama agar hanya 1 device yang bisa login (Single Session)
+        $user->tokens()->delete();
+
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
