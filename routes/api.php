@@ -19,6 +19,7 @@ Route::prefix('admin')->group(function () {
         Route::get('/stats', [\App\Http\Controllers\AdminController::class, 'getStats']);
         Route::get('/users/search', [\App\Http\Controllers\AdminController::class, 'searchUsers']);
         Route::post('/users/grant-premium', [\App\Http\Controllers\AdminController::class, 'grantPremium']);
+        Route::get('/transactions', [\App\Http\Controllers\AdminController::class, 'getTransactions']);
     });
 });
 
