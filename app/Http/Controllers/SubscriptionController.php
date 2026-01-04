@@ -127,10 +127,24 @@ class SubscriptionController extends Controller
         $request->validate([
             'plan_id' => 'required|string',
             'duration' => 'required|string',
-            'amount' => 'required|numeric'
         ]);
 
         $user = $request->user();
+
+        // Enforce Server-Side Pricing
+        $prices = [
+            'daily' => 3000,
+            '3days' => 8000,
+            'weekly' => 12000,
+            'monthly' => 35000,
+            'permanent' => 250000,
+        ];
+
+        if (!array_key_exists($request->plan_id, $prices)) {
+            return response()->json(['success' => false, 'message' => 'Invalid plan type'], 400);
+        }
+
+        $grossAmount = $prices[$request->plan_id];
 
         // Set Midtrans Configuration
         \Midtrans\Config::$serverKey = config('services.midtrans.server_key');
@@ -143,7 +157,7 @@ class SubscriptionController extends Controller
         $params = [
             'transaction_details' => [
                 'order_id' => $orderId,
-                'gross_amount' => (int) $request->amount,
+                'gross_amount' => $grossAmount,
             ],
             'customer_details' => [
                 'first_name' => $user->name,
