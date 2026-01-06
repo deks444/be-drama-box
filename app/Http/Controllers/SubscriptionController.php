@@ -161,6 +161,19 @@ class SubscriptionController extends Controller
             return response()->json(['success' => false, 'message' => 'Invalid plan type'], 400);
         }
 
+        // Check if user has pending transaction
+        $hasPending = $user->subscriptions()
+            ->where('payment_status', 'pending')
+            ->exists();
+
+        if ($hasPending) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda masih memiliki transaksi pending. Silakan selesaikan atau batalkan transaksi tersebut terlebih dahulu di Riwayat Transaksi.',
+                'has_pending' => true
+            ], 400);
+        }
+
         $grossAmount = $prices[$request->plan_id];
 
         $orderId = 'DRAMA-' . time() . '-' . $user->id;
@@ -210,7 +223,7 @@ class SubscriptionController extends Controller
                 'order_id' => $orderId,
                 'expires_at' => now(), // Will be updated on success webhook
                 'payment_status' => 'pending',
-                'snap_token' => null // Not used for Pakasir
+                'snap_token' => $paymentData['payment_number'] // Store QR string for later retrieval
             ]);
 
             return response()->json([
