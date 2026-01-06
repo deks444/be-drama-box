@@ -14,7 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // $middleware->statefulApi(); // Dinonaktifkan agar tidak menggunakan Session/Cookie, murni Token
         $middleware->validateCsrfTokens(except: [
-            '/api/midtrans/webhook',
+            '/api/pakasir/webhook',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Route;
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login'])->name('login');
 
-Route::post('/midtrans/webhook', [\App\Http\Controllers\MidtransController::class, 'webhook']);
+Route::post('/pakasir/webhook', [\App\Http\Controllers\PakasirController::class, 'webhook']);
 
 // Admin routes
 Route::prefix('admin')->group(function () {

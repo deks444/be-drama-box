@@ -22,39 +22,56 @@ class SubscriptionController extends Controller
 
     public function checkStatus($orderId)
     {
-        \Midtrans\Config::$serverKey = config('services.midtrans.server_key');
-        \Midtrans\Config::$isProduction = config('services.midtrans.is_production');
-
         try {
-            try {
-                $status = \Midtrans\Transaction::status($orderId);
-            } catch (\Exception $midtransError) {
-                // Jika Midtrans mengembalikan 404 (tidak ditemukan)
-                if (str_contains($midtransError->getMessage(), '404')) {
-                    $subscription = Subscription::where('order_id', $orderId)->first();
-                    if ($subscription && $subscription->payment_status === 'pending') {
-                        // Opsi 1: Hapus otomatis jika tidak ditemukan di Midtrans
-                        $subscription->delete();
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Transaksi tidak ditemukan di sistem Midtrans. Data lokal telah dibersihkan.',
-                            'status' => 'not_found'
-                        ]);
-                    }
-                }
-                throw $midtransError;
-            }
-
             $subscription = Subscription::where('order_id', $orderId)->first();
             if (!$subscription) {
                 return response()->json(['success' => false, 'message' => 'Subscription not found'], 404);
             }
 
-            // Ensure status is treated as an object as returned by Midtrans SDK
-            $transactionStatus = is_object($status) ? $status->transaction_status : $status['transaction_status'];
+            // Call Pakasir Transaction Detail API
+            $pakasirProject = config('services.pakasir.project');
+            $pakasirApiKey = config('services.pakasir.api_key');
+            $amount = $subscription->plan_type;
 
+            // Get amount from plan_type
+            $prices = [
+                'daily' => 3000,
+                '3days' => 8000,
+                'weekly' => 12000,
+                'monthly' => 35000,
+                'permanent' => 250000,
+            ];
+            $amount = $prices[$subscription->plan_type] ?? 0;
 
-            if ($transactionStatus == 'settlement' || $transactionStatus == 'capture') {
+            $url = "https://app.pakasir.com/api/transactiondetail?project={$pakasirProject}&amount={$amount}&order_id={$orderId}&api_key={$pakasirApiKey}";
+
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($httpCode !== 200) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to check payment status'
+                ], 500);
+            }
+
+            $pakasirResponse = json_decode($response, true);
+
+            if (!isset($pakasirResponse['transaction'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Transaction not found'
+                ], 404);
+            }
+
+            $transaction = $pakasirResponse['transaction'];
+            $transactionStatus = $transaction['status'];
+
+            if ($transactionStatus === 'completed') {
                 // Activate subscription
                 $expiresAt = now();
                 switch ($subscription->plan_type) {
@@ -146,30 +163,46 @@ class SubscriptionController extends Controller
 
         $grossAmount = $prices[$request->plan_id];
 
-        // Set Midtrans Configuration
-        \Midtrans\Config::$serverKey = config('services.midtrans.server_key');
-        \Midtrans\Config::$isProduction = config('services.midtrans.is_production');
-        \Midtrans\Config::$isSanitized = true;
-        \Midtrans\Config::$is3ds = true;
-
         $orderId = 'DRAMA-' . time() . '-' . $user->id;
 
-        $params = [
-            'transaction_details' => [
-                'order_id' => $orderId,
-                'gross_amount' => $grossAmount,
-            ],
-            'customer_details' => [
-                'first_name' => $user->name,
-                'email' => $user->email,
-            ],
-            'callbacks' => [
-                'finish' => env('FRONTEND_URL', url('/')) . '/membership?status=success',
-            ]
+        // Pakasir API Configuration
+        $pakasirProject = config('services.pakasir.project');
+        $pakasirApiKey = config('services.pakasir.api_key');
+        $pakasirUrl = 'https://app.pakasir.com/api/transactioncreate/qris';
+
+        $payload = [
+            'project' => $pakasirProject,
+            'order_id' => $orderId,
+            'amount' => $grossAmount,
+            'api_key' => $pakasirApiKey
         ];
 
         try {
-            $snapToken = \Midtrans\Snap::getSnapToken($params);
+            // Call Pakasir API to create QRIS payment
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $pakasirUrl);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: application/json',
+            ]);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($httpCode !== 200) {
+                throw new \Exception('Pakasir API error: ' . $response);
+            }
+
+            $pakasirResponse = json_decode($response, true);
+
+            if (!isset($pakasirResponse['payment'])) {
+                throw new \Exception('Invalid response from Pakasir');
+            }
+
+            $paymentData = $pakasirResponse['payment'];
 
             // Create pending subscription
             $subscription = $user->subscriptions()->create([
@@ -177,13 +210,19 @@ class SubscriptionController extends Controller
                 'order_id' => $orderId,
                 'expires_at' => now(), // Will be updated on success webhook
                 'payment_status' => 'pending',
-                'snap_token' => $snapToken
+                'snap_token' => null // Not used for Pakasir
             ]);
 
             return response()->json([
                 'success' => true,
-                'snap_token' => $snapToken,
-                'order_id' => $orderId
+                'payment' => [
+                    'qr_string' => $paymentData['payment_number'],
+                    'amount' => $paymentData['amount'],
+                    'fee' => $paymentData['fee'],
+                    'total_payment' => $paymentData['total_payment'],
+                    'expired_at' => $paymentData['expired_at'],
+                    'order_id' => $orderId
+                ]
             ]);
         } catch (\Exception $e) {
             return response()->json([
