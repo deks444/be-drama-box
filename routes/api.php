@@ -17,6 +17,7 @@ Route::prefix('admin')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/logout', [\App\Http\Controllers\AdminController::class, 'logout']);
         Route::get('/stats', [\App\Http\Controllers\AdminController::class, 'getStats']);
+        Route::get('/users', [\App\Http\Controllers\AdminController::class, 'getUsers']);
         Route::get('/users/search', [\App\Http\Controllers\AdminController::class, 'searchUsers']);
         Route::post('/users/grant-premium', [\App\Http\Controllers\AdminController::class, 'grantPremium']);
         Route::get('/transactions', [\App\Http\Controllers\AdminController::class, 'getTransactions']);

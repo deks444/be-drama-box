@@ -126,13 +126,29 @@ class AdminController extends Controller
         $transactions = \App\Models\Subscription::with('user:id,name,email')
             ->where('payment_status', 'success')
             ->orderBy('created_at', 'desc')
-            ->get(); // Fetch all for now as requested "rekap", or simple pagination? Let's get 100 latest for simplicity or all? The request is "rekap". Let's limit to 50 for now or paginate. Actually, user asked for "menu rekap", usually implies a list. I'll use get() but maybe limit to 100 to avoid huge payload. Or just all. Since it's admin, they might want all.
+            ->get();
 
-        // Standard Practice: Use Pagination for APIs, but for "simple menu" requested by user without specifying pagination, fetch latest 100 is safer.
-        // Actually, let's just return all successful ones.
         return response()->json([
             'success' => true,
             'data' => $transactions
+        ]);
+    }
+
+    public function getUsers()
+    {
+        $users = User::with([
+            'subscriptions' => function ($q) {
+                $q->where('payment_status', 'success')
+                    ->where('expires_at', '>', now())
+                    ->orderBy('expires_at', 'desc');
+            }
+        ])
+            ->orderBy('created_at', 'desc')
+            ->paginate(20);
+
+        return response()->json([
+            'success' => true,
+            'data' => $users
         ]);
     }
 }
