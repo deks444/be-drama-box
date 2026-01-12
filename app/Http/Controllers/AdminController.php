@@ -80,13 +80,20 @@ class AdminController extends Controller
         $request->validate([
             'user_id' => 'required|exists:users,id',
             'plan_type' => 'required|string',
-            'duration_days' => 'required|integer|min:1'
+            'duration_days' => 'nullable|integer|min:1',
+            'duration_minutes' => 'nullable|integer|min:1'
         ]);
 
         $user = User::findOrFail($request->user_id);
 
         // Buat subscription manual
-        $expiresAt = now()->addDays($request->duration_days);
+        if ($request->filled('duration_minutes')) {
+            $expiresAt = now()->addMinutes($request->duration_minutes);
+            $durationLog = "{$request->duration_minutes} minutes";
+        } else {
+            $expiresAt = now()->addDays($request->duration_days ?? 30);
+            $durationLog = ($request->duration_days ?? 30) . " days";
+        }
 
         $subscription = $user->subscriptions()->create([
             'plan_type' => $request->plan_type,
@@ -95,7 +102,7 @@ class AdminController extends Controller
             'payment_status' => 'success',
         ]);
 
-        \Log::info("Admin granted premium to user: {$user->email}, Plan: {$request->plan_type}, Duration: {$request->duration_days} days");
+        \Log::info("Admin granted premium to user: {$user->email}, Plan: {$request->plan_type}, Duration: {$durationLog}");
 
         return response()->json([
             'success' => true,

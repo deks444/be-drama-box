@@ -98,6 +98,7 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
+        // Hitung status premium secara real-time berdasarkan waktu sekarang
         $isSubscribed = $user->subscriptions()
             ->where('payment_status', 'success')
             ->where('expires_at', '>', now())
@@ -105,7 +106,9 @@ class AuthController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => array_merge($user->toArray(), ['is_subscribed' => $isSubscribed]),
+            'data' => array_merge($user->toArray(), [
+                'is_subscribed' => (bool) $isSubscribed
+            ]),
         ]);
     }
 
