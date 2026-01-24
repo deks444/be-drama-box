@@ -5,43 +5,40 @@ pipeline {
         githubPush()
     }
 
-    tools {
-        // Pastikan nama 'docker-latest' SAMA PERSIS dengan di Global Tool Configuration
-        dockerTool 'docker-latest'
-    }
-
     environment {
+        // Load credentials - Masking sudah oke di log sebelumnya
         DRAMABOX_AUTH = credentials('dramabox-auth-env')
         APP_PORT = '9004'
         IMAGE_NAME = 'dramabox-app'
     }
 
     stages {
-        stage('Docker Version Check') {
+        stage('Setup Docker Tool') {
             steps {
-                // Menggunakan script untuk verifikasi path
                 script {
-                    try {
-                        sh 'docker --version'
-                    } catch (Exception e) {
-                        echo "Docker tidak ditemukan di PATH, mencoba mencari secara manual..."
-                        // Fallback: Jika 'which docker' gagal, kita cetak PATH untuk debug
-                        sh 'printenv PATH'
-                        error "Docker executable tetap tidak ditemukan. Cek Global Tool Configuration."
-                    }
+                    // 1. Ambil path dari tool 'docker-latest'
+                    def dockerToolPath = tool name: 'docker-latest', type: 'dockerTool'
+                    
+                    // 2. Tambahkan folder bin dari tool tersebut ke PATH secara manual
+                    def dockerBin = "${dockerToolPath}/bin"
+                    env.PATH = "${dockerBin}:${env.PATH}"
+                    
+                    echo "Docker Tool Path: ${dockerBin}"
+                    sh "docker --version" // Sekarang ini seharusnya berhasil
                 }
             }
         }
 
-        stage('Build & Deploy') {
+        stage('Build & Run') {
             steps {
                 script {
-                    // Build Image
+                    // Build image
                     sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
-                    
-                    // Deployment
-                    sh "docker stop ${IMAGE_NAME} || true"
-                    sh "docker rm ${IMAGE_NAME} || true"
+
+                    // Stop & Remove container lama jika ada
+                    sh "docker stop ${IMAGE_NAME} || true && docker rm ${IMAGE_NAME} || true"
+
+                    // Jalankan container dengan Port 9004 dan Env dari credentials
                     sh """
                         docker run -d \
                         --name ${IMAGE_NAME} \
