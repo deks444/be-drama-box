@@ -1,12 +1,9 @@
 pipeline {
     agent any
 
-    triggers {
-        githubPush()
-    }
-
     environment {
         APP_NAME = 'drama-box-auth'
+        // Mengambil file .env dari sistem kredensial Jenkins
         DOT_ENV_FILE = credentials('dramabox-auth-env')
     }
 
@@ -19,43 +16,54 @@ pipeline {
 
         stage('Prepare Environment') {
             steps {
+                echo 'Injecting credentials...'
+                // Menyalin file secret .env ke workspace
                 sh "cp ${DOT_ENV_FILE} .env"
             }
         }
 
-        stage('Cleanup & Stop Old Process') {
+        stage('Cleanup Old Process') {
             steps {
-                echo 'Cleaning up port 9004 and old containers...'
+                echo 'Stopping old containers and cleaning up disk...'
                 script {
-                    // Berhenti dan hapus kontainer lama
+                    // Menghentikan kontainer lama agar port 9004 terlepas
                     sh 'docker-compose down --remove-orphans'
-                    // Hapus image sampah agar disk tidak penuh
+                    // Menghapus image sisa (dangling) agar storage tidak penuh
                     sh 'docker image prune -f'
                 }
             }
         }
 
-        stage('Build & Run Background') {
+        stage('Build & Run') {
             steps {
-                echo 'Starting application on port 9004...'
+                echo 'Building and starting application in background...'
+                // -d (detached) menjalankan di background
+                // --build memastikan perubahan kode terbaru ikut di-build
                 sh 'docker-compose up --build -d'
             }
         }
 
-        stage('Verify Access') {
+        stage('Health Check') {
             steps {
-                echo 'Verifying application is live on port 9004...'
-                // Menunggu 5 detik agar aplikasi startup sempurna
+                echo 'Verifying application status on port 9004...'
                 sleep 5
-                sh 'curl -I http://localhost:9004 || echo "Warning: Port 9004 not responding yet"'
+                sh 'docker ps | grep drama-box-auth'
+                // Opsional: Cek apakah port merespon
+                sh 'curl -f http://localhost:9004 || echo "App is starting up..."'
             }
         }
     }
 
     post {
         always {
-            sh 'rm -f .env'
-            cleanWs()
+            echo 'Cleaning up workspace...'
+            sh 'rm -f .env' // Hapus file sensitif dari workspace Jenkins
+        }
+        success {
+            echo "DEPLOYMENT SUCCESS: Aplikasi berjalan di http://localhost:9004"
+        }
+        failure {
+            echo "DEPLOYMENT FAILED: Periksa docker logs drama-box-auth"
         }
     }
 }
