@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    triggers {
+        githubPush()
+    }
+
     environment {
         APP_NAME = 'drama-box-auth'
         DOT_ENV_FILE = credentials('dramabox-auth-env')
