@@ -25,6 +25,7 @@ pipeline {
         }
 
         stage('Prepare Environment') {
+            steps{
             echo 'Injecting .env file safely...'
                 // Menggunakan withCredentials untuk menghindari warning keamanan
                 configFileProvider([configFile(fileId: "${ENV_ID}", targetLocation: '.env')]) {
