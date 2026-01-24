@@ -31,7 +31,12 @@ pipeline {
         stage('Build & Run') {
             steps {
                 script {
-                    // Gunakan kutip agar path dengan spasi aman
+                    // Cek lokasi saat ini dan daftar file yang ada
+                    sh "pwd"
+                    sh "ls -R" // Ini akan melist SEMUA file hingga ke sub-folder
+
+                    // Ganti '.' dengan folder yang berisi Dockerfile jika tidak ada di root
+                    // Contoh: sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ./sub-folder-anda"
                     sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
 
                     sh "docker stop ${IMAGE_NAME} || true && docker rm ${IMAGE_NAME} || true"
