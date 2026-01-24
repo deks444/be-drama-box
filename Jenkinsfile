@@ -5,6 +5,11 @@ pipeline {
         githubPush()
     }
 
+    tools {
+        // Pastikan nama 'docker-latest' SAMA PERSIS dengan di Global Tool Configuration
+        dockerTool 'docker-latest'
+    }
+
     environment {
         DRAMABOX_AUTH = credentials('dramabox-auth-env')
         APP_PORT = '9004'
@@ -12,13 +17,18 @@ pipeline {
     }
 
     stages {
-        stage('Initialize Docker Path') {
+        stage('Docker Version Check') {
             steps {
+                // Menggunakan script untuk verifikasi path
                 script {
-                    // Mengambil path absolut dari tool 'docker-latest'
-                    def dockerHome = tool name: 'docker-latest', type: 'dockerTool'
-                    // Menambahkan folder bin docker ke PATH agar perintah 'docker' bisa dipanggil
-                    env.PATH = "${dockerHome}/bin:${env.PATH}"
+                    try {
+                        sh 'docker --version'
+                    } catch (Exception e) {
+                        echo "Docker tidak ditemukan di PATH, mencoba mencari secara manual..."
+                        // Fallback: Jika 'which docker' gagal, kita cetak PATH untuk debug
+                        sh 'printenv PATH'
+                        error "Docker executable tetap tidak ditemukan. Cek Global Tool Configuration."
+                    }
                 }
             }
         }
@@ -26,13 +36,12 @@ pipeline {
         stage('Build & Deploy') {
             steps {
                 script {
-                    echo "Menggunakan Docker dari: ${sh(script: 'which docker', returnStdout: true).trim()}"
-                    
                     // Build Image
                     sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
                     
-                    // Cleanup & Run
-                    sh "docker stop ${IMAGE_NAME} || true && docker rm ${IMAGE_NAME} || true"
+                    // Deployment
+                    sh "docker stop ${IMAGE_NAME} || true"
+                    sh "docker rm ${IMAGE_NAME} || true"
                     sh """
                         docker run -d \
                         --name ${IMAGE_NAME} \
