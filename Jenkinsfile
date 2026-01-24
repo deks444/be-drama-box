@@ -12,8 +12,6 @@ pipeline {
 
     environment {
         APP_NAME = 'drama-box-auth'
-        // Gunakan ID kredensial yang Anda buat di Jenkins
-        ENV_ID = 'dramabox-auth-env'
     }
 
     stages {
@@ -26,44 +24,36 @@ pipeline {
 
         stage('Prepare Environment') {
             steps {
-                echo 'Injecting .env file from Credentials Manager...'
+                echo 'Injecting .env file...'
                 script {
-                    // Mengambil path file rahasia dan menyalinnya ke .env di workspace
-                    withCredentials([file(credentialsId: "${ENV_CRED_ID}", variable: 'SECRET_PATH')]) {
+                    // Masukkan ID kredensial langsung di sini untuk menghindari error "MissingProperty"
+                    // Ganti 'dramabox-auth-env' jika ID di Jenkins Anda berbeda
+                    withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECRET_PATH')]) {
                         sh 'cp "$SECRET_PATH" .env'
                     }
                 }
             }
         }
 
-        stage('Cleanup & Down') {
+        stage('Cleanup & Build') {
             steps {
-                echo 'Stopping existing containers...'
-                // '|| true' agar tidak error jika kontainer belum ada
-                sh 'docker compose down --remove-orphans || true'
+                script {
+                    echo 'Stopping old containers and building new ones...'
+                    // Gunakan docker compose (V2)
+                    sh 'docker compose down --remove-orphans || true'
+                    sh 'docker compose up --build -d'
+                }
             }
         }
-
-        stage('Build & Run Background') {
-            steps {
-                echo 'Starting application on port 9004...'
-                // Menjalankan di background (detached mode)
-                sh 'docker compose up --build -d'
-            }
-        }
-
-        stage('Verify Process') {
-            steps {
-                sh 'docker ps | grep ${APP_NAME}'
-                echo "Deployment Complete. Access at http://your-ip:9004"
-            }
-        }
-    }
 
     post {
         always {
-            // Menghapus file .env sensitif agar tidak tertinggal di workspace
+            // Hapus .env dari workspace demi keamanan
             sh 'rm -f .env'
+            cleanWs()
+        }
+        success {
+            echo "Aplikasi berjalan di background pada port 9004"
         }
     }
 }
