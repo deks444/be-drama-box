@@ -28,24 +28,17 @@ pipeline {
             }
         }
 
-        stage('Build & Run') {
+        stage('Deploy') {
             steps {
                 script {
-                    // Cek lokasi saat ini dan daftar file yang ada
-                    sh "pwd"
-                    sh "ls -R" // Ini akan melist SEMUA file hingga ke sub-folder
-
-                    // Ganti '.' dengan folder yang berisi Dockerfile jika tidak ada di root
-                    // Contoh: sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ./sub-folder-anda"
-                    sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
-
                     sh "docker stop ${IMAGE_NAME} || true && docker rm ${IMAGE_NAME} || true"
-
+                    
+                    // Kita asumsikan dramabox-auth-env berisi konten lengkap .env atau key tertentu
                     sh """
                         docker run -d \
                         --name ${IMAGE_NAME} \
-                        -p ${APP_PORT}:${APP_PORT} \
-                        -e AUTH_KEY='${DRAMABOX_AUTH}' \
+                        -p 9004:9004 \
+                        -e APP_KEY=${DRAMABOX_AUTH} \
                         ${IMAGE_NAME}:${BUILD_NUMBER}
                     """
                 }
