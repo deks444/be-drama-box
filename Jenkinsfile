@@ -31,6 +31,7 @@ pipeline {
                 configFileProvider([configFile(fileId: "${ENV_ID}", targetLocation: '.env')]) {
                     echo "Environment file injected successfully."
                 }
+            }
         }
 
         stage('Cleanup & Down') {
