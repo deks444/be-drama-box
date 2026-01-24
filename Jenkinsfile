@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    triggers {
+        githubPush()
+    }
+
     environment {
         APP_NAME = 'drama-box-auth'
         // Mengambil file .env dari sistem kredensial Jenkins
@@ -10,7 +14,8 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/PTMajuJayaMakmur/drama-box-auth.git'
+                // Mengambil source code dari GitHub
+                checkout scm
             }
         }
 
