@@ -5,45 +5,34 @@ pipeline {
         githubPush()
     }
 
-    tools {
-        // Menggunakan tool docker yang sudah dikonfigurasi di Jenkins Global Tool Configuration
-        dockerTool 'docker-latest'
-    }
-
     environment {
-        // Mengambil kredensial dari Jenkins Credentials Store
         DRAMABOX_AUTH = credentials('dramabox-auth-env')
         APP_PORT = '9004'
         IMAGE_NAME = 'dramabox-app'
     }
 
     stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
-        stage('Build Image') {
+        stage('Initialize Docker Path') {
             steps {
                 script {
-                    // Menggunakan block tool secara eksplisit untuk membungkus perintah sh
-                    def dockerPath = tool 'docker-latest'
-                    withEnv(["PATH+DOCKER=${dockerPath}/bin"]) {
-                        sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
-                    }
+                    // Mengambil path absolut dari tool 'docker-latest'
+                    def dockerHome = tool name: 'docker-latest', type: 'dockerTool'
+                    // Menambahkan folder bin docker ke PATH agar perintah 'docker' bisa dipanggil
+                    env.PATH = "${dockerHome}/bin:${env.PATH}"
                 }
             }
         }
 
-        stage('Deploy Container') {
+        stage('Build & Deploy') {
             steps {
                 script {
-                    // Stop container lama jika ada (agar port 9004 tidak bentrok)
-                    sh "docker stop ${IMAGE_NAME} || true && docker rm ${IMAGE_NAME} || true"
+                    echo "Menggunakan Docker dari: ${sh(script: 'which docker', returnStdout: true).trim()}"
                     
-                    // Menjalankan container baru
-                    // Menggunakan kredensial dari environment variable
+                    // Build Image
+                    sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
+                    
+                    // Cleanup & Run
+                    sh "docker stop ${IMAGE_NAME} || true && docker rm ${IMAGE_NAME} || true"
                     sh """
                         docker run -d \
                         --name ${IMAGE_NAME} \
@@ -55,14 +44,4 @@ pipeline {
             }
         }
     }
-
-    post {
-        success {
-            echo "Pipeline berhasil! Aplikasi berjalan di port ${APP_PORT}"
-        }
-        failure {
-            echo "Pipeline gagal. Silakan cek log build."
-        }
-    }
 }
-    
