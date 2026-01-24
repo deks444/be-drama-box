@@ -12,8 +12,8 @@ pipeline {
 
     environment {
         APP_NAME = 'drama-box-auth'
-        // Kredensial .env dari Jenkins Credentials Manager
-        DOT_ENV_FILE = credentials('dramabox-auth-env')
+        // Gunakan ID kredensial yang Anda buat di Jenkins
+        ENV_ID = 'dramabox-auth-env'
     }
 
     stages {
@@ -25,10 +25,11 @@ pipeline {
         }
 
         stage('Prepare Environment') {
-            steps {
-                echo 'Injecting .env file...'
-                sh "cp ${DOT_ENV_FILE} .env"
-            }
+            echo 'Injecting .env file safely...'
+                // Menggunakan withCredentials untuk menghindari warning keamanan
+                configFileProvider([configFile(fileId: "${ENV_ID}", targetLocation: '.env')]) {
+                    echo "Environment file injected successfully."
+                }
         }
 
         stage('Cleanup & Down') {
