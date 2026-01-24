@@ -27,8 +27,11 @@ pipeline {
         stage('Build Image') {
             steps {
                 script {
-                    // Membangun image menggunakan Docker tool
-                    sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
+                    // Menggunakan block tool secara eksplisit untuk membungkus perintah sh
+                    def dockerPath = tool 'docker-latest'
+                    withEnv(["PATH+DOCKER=${dockerPath}/bin"]) {
+                        sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
+                    }
                 }
             }
         }
