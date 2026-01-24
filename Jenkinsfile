@@ -5,6 +5,10 @@ pipeline {
         githubPush()
     }
 
+    tools {
+        dockerTool 'docker-latest' 
+    }
+
     environment {
         APP_NAME = 'drama-box-auth'
     }
