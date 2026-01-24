@@ -35,11 +35,9 @@ pipeline {
 
         stage('Cleanup Old Process') {
             steps {
-                echo 'Stopping old containers and cleaning up disk...'
                 script {
-                    // Menghentikan kontainer lama agar port 9004 terlepas
-                    sh 'docker-compose down --remove-orphans'
-                    // Menghapus image sisa (dangling) agar storage tidak penuh
+                    // Gunakan spasi: 'docker compose'
+                    sh 'docker compose down --remove-orphans'
                     sh 'docker image prune -f'
                 }
             }
@@ -47,10 +45,8 @@ pipeline {
 
         stage('Build & Run') {
             steps {
-                echo 'Building and starting application in background...'
-                // -d (detached) menjalankan di background
-                // --build memastikan perubahan kode terbaru ikut di-build
-                sh 'docker-compose up --build -d'
+                // Gunakan spasi: 'docker compose'
+                sh 'docker compose up --build -d'
             }
         }
 
