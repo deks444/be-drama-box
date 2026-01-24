@@ -7,8 +7,6 @@ pipeline {
 
     environment {
         APP_NAME = 'drama-box-auth'
-        // Mengambil file .env dari sistem kredensial Jenkins
-        DOT_ENV_FILE = credentials('dramabox-auth-env')
     }
 
     stages {
@@ -19,13 +17,21 @@ pipeline {
             }
         }
 
-        stage('Prepare Environment') {
+         stage('Setup Environment') {
             steps {
-                echo 'Injecting credentials...'
-                // Menyalin file secret .env ke workspace
-                sh "cp ${DOT_ENV_FILE} .env"
+                // Mengambil file .env dari Jenkins Credentials (ID: dramabox-auth-env)
+                withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECRET_FILE')]) {
+                    script {
+                        echo 'Konfigurasi file .env...'
+                        // Hapus file lama jika ada untuk menghindari 'Permission Denied'
+                        sh 'rm -f .env || true'
+                        sh 'cp "${SECRET_FILE}" .env'
+                        sh 'chmod 644 .env'
+                    }
+                }
             }
         }
+
 
         stage('Cleanup Old Process') {
             steps {
