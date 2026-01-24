@@ -19,10 +19,7 @@ pipeline {
 
         stage('Prepare Environment') {
             steps {
-                // Menyalin file rahasia ke folder proyek
                 sh "cp ${DOT_ENV_FILE} .env"
-                // Opsional: Memasukkan port ke .env jika aplikasi membacanya
-                sh "echo 'PORT=3000' >> .env"
             }
         }
 
