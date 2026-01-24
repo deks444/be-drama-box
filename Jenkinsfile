@@ -21,6 +21,7 @@ pipeline {
                 checkout scm
             }
         }
+    }
 
         stage('Prepare Environment') {
             steps {
@@ -56,4 +57,3 @@ pipeline {
             echo "Aplikasi berjalan di background pada port 9004"
         }
     }
-}
