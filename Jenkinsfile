@@ -25,11 +25,13 @@ pipeline {
         }
 
         stage('Prepare Environment') {
-            steps{
-            echo 'Injecting .env file safely...'
-                // Menggunakan withCredentials untuk menghindari warning keamanan
-                configFileProvider([configFile(fileId: "${ENV_ID}", targetLocation: '.env')]) {
-                    echo "Environment file injected successfully."
+            steps {
+                echo 'Injecting .env file from Credentials Manager...'
+                script {
+                    // Mengambil path file rahasia dan menyalinnya ke .env di workspace
+                    withCredentials([file(credentialsId: "${ENV_CRED_ID}", variable: 'SECRET_PATH')]) {
+                        sh 'cp "$SECRET_PATH" .env'
+                    }
                 }
             }
         }
