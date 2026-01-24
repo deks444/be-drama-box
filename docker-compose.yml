@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  drama-box-auth:
+    build: .
+    container_name: drama-box-auth
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "9004:3000" # Memetakan port 9004 Server ke port 3000 Kontainer
