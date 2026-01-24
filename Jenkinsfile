@@ -1,78 +1,64 @@
 pipeline {
     agent any
-
+    
     triggers {
         githubPush()
     }
-
+    
+    // Menggunakan tool Docker yang sudah diinstal di Jenkins
     tools {
         dockerTool 'docker-latest' 
     }
 
     environment {
         APP_NAME = 'drama-box-auth'
+        // Kredensial .env dari Jenkins Credentials Manager
+        DOT_ENV_FILE = credentials('dramabox-auth-env')
     }
 
     stages {
-        stage('Checkout') {
+        stage('Checkout SCM') {
             steps {
-                // Mengambil source code dari GitHub
+                // Jenkins akan otomatis mengambil kode dari repo yang dikonfigurasi di Job
                 checkout scm
             }
         }
 
-         stage('Setup Environment') {
+        stage('Prepare Environment') {
             steps {
-                // Mengambil file .env dari Jenkins Credentials (ID: dramabox-auth-env)
-                withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECRET_FILE')]) {
-                    script {
-                        echo 'Konfigurasi file .env...'
-                        // Hapus file lama jika ada untuk menghindari 'Permission Denied'
-                        sh 'rm -f .env || true'
-                        sh 'cp "${SECRET_FILE}" .env'
-                        sh 'chmod 644 .env'
-                    }
-                }
+                echo 'Injecting .env file...'
+                sh "cp ${DOT_ENV_FILE} .env"
             }
         }
 
-        stage('Cleanup') {
+        stage('Cleanup & Down') {
             steps {
-                echo 'Cleaning up with Docker Compose V2...'
-                // Kita coba 'docker compose' (V2), jika gagal baru lari ke 'docker-compose' (V1)
-                sh 'docker compose down --remove-orphans || docker-compose down --remove-orphans'
-                sh 'docker image prune -f'
+                echo 'Stopping existing containers...'
+                // '|| true' agar tidak error jika kontainer belum ada
+                sh 'docker compose down --remove-orphans || true'
             }
         }
 
-        stage('Build & Run') {
+        stage('Build & Run Background') {
             steps {
-                echo 'Deploying to port 9004...'
-                sh 'docker compose up --build -d || docker-compose up --build -d'
+                echo 'Starting application on port 9004...'
+                // Menjalankan di background (detached mode)
+                sh 'docker compose up --build -d'
             }
         }
 
-        stage('Health Check') {
+        stage('Verify Process') {
             steps {
-                echo 'Verifying application status on port 9004...'
-                sleep 5
-                sh 'docker ps | grep drama-box-auth'
-                // Opsional: Cek apakah port merespon
-                sh 'curl -f http://localhost:9004 || echo "App is starting up..."'
+                sh 'docker ps | grep ${APP_NAME}'
+                echo "Deployment Complete. Access at http://your-ip:9004"
             }
         }
     }
 
     post {
         always {
-            echo 'Cleaning up workspace...'
-            sh 'rm -f .env' // Hapus file sensitif dari workspace Jenkins
-        }
-        success {
-            echo "DEPLOYMENT SUCCESS: Aplikasi berjalan di http://localhost:9004"
-        }
-        failure {
-            echo "DEPLOYMENT FAILED: Periksa docker logs drama-box-auth"
+            // Menghapus file .env sensitif agar tidak tertinggal di workspace
+            sh 'rm -f .env'
         }
     }
 }
