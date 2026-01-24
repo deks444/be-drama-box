@@ -32,21 +32,19 @@ pipeline {
             }
         }
 
-
-        stage('Cleanup Old Process') {
+        stage('Cleanup') {
             steps {
-                script {
-                    // Gunakan spasi: 'docker compose'
-                    sh 'docker compose down --remove-orphans'
-                    sh 'docker image prune -f'
-                }
+                echo 'Cleaning up with Docker Compose V2...'
+                // Kita coba 'docker compose' (V2), jika gagal baru lari ke 'docker-compose' (V1)
+                sh 'docker compose down --remove-orphans || docker-compose down --remove-orphans'
+                sh 'docker image prune -f'
             }
         }
 
         stage('Build & Run') {
             steps {
-                // Gunakan spasi: 'docker compose'
-                sh 'docker compose up --build -d'
+                echo 'Deploying to port 9004...'
+                sh 'docker compose up --build -d || docker-compose up --build -d'
             }
         }
 
