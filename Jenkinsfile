@@ -4,7 +4,6 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                // Pastikan workspace bersih agar tidak ada folder hantu bernama .env
                 cleanWs()
                 checkout scm
             }
@@ -12,58 +11,46 @@ pipeline {
 
         stage('Secure Env Injection') {
             steps {
-                // Mengambil file dari Jenkins Credentials (Kind: Secret File)
-                withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECRET_FILE_PATH')]) {
+                // Menggunakan withCredentials untuk menghindari warning Groovy Interpolation
+                withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECRET_FILE')]) {
                     script {
-                        // Ambil path absolut workspace saat ini
-                        def wsPath = pwd()
-                        
-                        echo "Copying secret file from: ${SECRET_FILE_PATH}"
-                        
-                        // Perintah shell dengan pengecekan keberadaan file
-                        sh """
-                            # Hapus jika ada folder .env (penyebab error directory)
-                            rm -rf ${wsPath}/.env
+                        // Gunakan single quotes (') pada sh untuk keamanan total
+                        // Kita gunakan double quotes pada variable shell ("$SECRET_FILE") 
+                        // untuk menangani spasi pada path workspace
+                        sh '''
+                            # Hapus jika ada folder/file .env lama
+                            rm -rf .env
                             
-                            # Salin file rahasia ke file .env di workspace
-                            cp -f '${SECRET_FILE_PATH}' '${wsPath}/.env'
+                            # Salin file menggunakan variable environment shell asli
+                            # Tambahkan tanda kutip pada target agar folder berspasi aman
+                            cp -f "$SECRET_FILE" .env
                             
-                            # Validasi apakah file benar-benar sudah ada
-                            if [ -f '${wsPath}/.env' ]; then
-                                echo "SUCCESS: .env has been created in ${wsPath}"
-                                chmod 644 '${wsPath}/.env'
+                            # Validasi tanpa menampilkan path rahasia di echo
+                            if [ -f .env ]; then
+                                chmod 644 .env
+                                echo "File .env configured successfully."
                             else
-                                echo "ERROR: Failed to create .env file"
+                                echo "Failed to inject .env file."
                                 exit 1
                             fi
-                        """
+                        '''
                     }
                 }
             }
         }
 
-        stage('Laravel Dependencies') {
+        stage('Laravel Setup') {
             steps {
-                // Menjalankan perintah Laravel menggunakan file .env yang sudah siap
-                sh 'composer install --no-interaction --prefer-dist --optimize-autoloader'
-                
-                // Jika .env hasil copy tidak punya key, kita generate
+                // Gunakan single quotes agar Jenkins tidak mencoba menginterpolasi apapun
+                sh 'composer install --no-interaction --prefer-dist'
                 sh 'php artisan key:generate --force'
             }
         }
 
-        stage('Execute Tests') {
+        stage('Testing') {
             steps {
-                echo 'Running Drama Box Auth Test Suite...'
                 sh 'php artisan test'
             }
-        }
-    }
-
-    post {
-        always {
-            // Hapus file sensitif setelah build selesai demi keamanan
-            sh 'rm -f .env'
         }
     }
 }
