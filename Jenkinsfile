@@ -1,9 +1,3 @@
-Sepertinya link download yang saya berikan sebelumnya memberikan file HTML (halaman "Not Found") alih-alih file binary PHP, itulah sebabnya muncul error ./local_bin/php: 1: Not: not found.
-
-Mari kita gunakan link direct download yang lebih stabil dan mengubah sedikit logika instalasi dependensi sistemnya. Berikut adalah Pipeline SCM final yang menggunakan PHP 8.2 Portable yang sudah dikompresi (tar.gz) agar lebih aman saat diunduh.
-
-Jenkinsfile (The "Final Boss" Solution)
-Groovy
 pipeline {
     agent any
 
