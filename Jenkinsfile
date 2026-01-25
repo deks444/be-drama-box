@@ -10,14 +10,13 @@ pipeline {
 
         stage('Setup Environment') {
             steps {
-                // Menggunakan withCredentials untuk menghindari 'Insecure Interpolation'
                 withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECRET_ENV')]) {
                     script {
-                        // 1. Hapus jika ada folder/file .env lama untuk menghindari konflik 'Not a directory'
+                        // Menghapus entitas .env lama (baik file maupun folder)
                         sh 'rm -rf .env'
-                        
-                        // 2. Salin file rahasia ke file .env (Gunakan single quote untuk keamanan)
-                        sh 'cp ${SECRET_ENV} .env'
+                        // Membuat file .env baru dari Secret File
+                        sh 'cat ${SECRET_ENV} > .env'
+                        sh 'chmod 644 .env'
                     }
                 }
             }
@@ -25,26 +24,16 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
-                // Install PHP dependencies via Composer
+                // Tambahkan path composer jika tidak terbaca
                 sh 'composer install --no-interaction --optimize-autoloader --no-dev'
             }
         }
 
-        stage('Laravel Optimization') {
+        stage('Laravel Prep') {
             steps {
-                script {
-                    sh 'php artisan key:generate --force'
-                    sh 'php artisan config:cache'
-                    sh 'php artisan route:cache'
-                    // Jalankan migrasi jika database sudah siap
-                    // sh 'php artisan migrate --force'
-                }
-            }
-        }
-
-        stage('Permissions') {
-            steps {
-                // Memberikan izin akses ke folder storage Laravel
+                sh 'php artisan key:generate --force'
+                sh 'php artisan storage:link'
+                // Pastikan folder storage bisa ditulisi
                 sh 'chmod -R 775 storage bootstrap/cache'
             }
         }
