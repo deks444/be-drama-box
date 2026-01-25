@@ -41,10 +41,17 @@ pipeline {
 
         stage('Laravel Setup') {
             steps {
-                // Gunakan single quotes agar Jenkins tidak mencoba menginterpolasi apapun
-                sh 'composer install --no-interaction --prefer-dist'
-                sh 'php artisan key:generate --force'
-            }
+        sh '''
+            # Download composer local jika belum ada
+            if [ ! -f composer.phar ]; then
+                curl -sS https://getcomposer.org/installer | php
+            fi
+            
+            # Jalankan menggunakan php
+            php composer.phar install --no-interaction --prefer-dist
+            php artisan key:generate --force
+        '''
+    }
         }
 
         stage('Testing') {
