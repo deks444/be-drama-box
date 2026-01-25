@@ -12,18 +12,20 @@ pipeline {
             }
         }
 
-        stage('Inject Environment') {
+        stage('Environment Fix') {
             steps {
-                // 3. Menggunakan withCredentials untuk menangani file rahasia
-                // Pastikan 'dramabox-auth-env' adalah ID yang tepat di Jenkins Credentials
-                withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECRET_ENV')]) {
+                // Gunakan id kredensial yang tepat: dramabox-auth-env
+                withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECURE_ENV_PATH')]) {
                     script {
-                        // Gunakan single quotes (') untuk menghindari warning security
-                        // dan memaksa shell Linux yang mengeksekusi penyalinan
-                        sh 'cp -f ${SECRET_ENV} .env'
+                        // 1. Ambil path absolut workspace saat ini
+                        def workspace = pwd()
                         
-                        // Verifikasi bahwa .env sekarang adalah FILE, bukan direktori
-                        sh '[ -f .env ] && echo ".env file created successfully" || (echo ".env is not a file" && exit 1)'
+                        // 2. Gunakan single quotes agar aman dari Groovy Interpolation
+                        // Kita paksa copy ke path absolut workspace
+                        sh "cp -f '${SECURE_ENV_PATH}' ${workspace}/.env"
+                        
+                        // 3. Verifikasi keberadaan file
+                        sh "ls -la ${workspace}/.env"
                     }
                 }
             }
