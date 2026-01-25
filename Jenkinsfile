@@ -1,5 +1,10 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'php:8.2-cli' // Menggunakan image PHP resmi
+            args '-p 9004:9004' // Membuka port agar bisa diakses
+        }
+    }
 
     triggers {
         githubPush()
@@ -7,8 +12,6 @@ pipeline {
 
     environment {
         APP_PORT = '9004'
-        // Menambahkan lokasi umum bin ke PATH (sesuaikan jika perlu)
-        PATH = "/usr/local/bin:/usr/bin:/bin:${env.PATH}"
     }
 
     stages {
@@ -19,47 +22,33 @@ pipeline {
             }
         }
 
-        stage('Setup Environment') {
+        stages {
+        stage('Setup & Install') {
             steps {
                 withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'ENV_PATH')]) {
                     sh '''
-                        cp "$ENV_PATH" .env
+                        # Install dependensi sistem yang diperlukan Laravel
+                        apt-get update && apt-get install -y unzip libpq-dev libcurl4-gnutls-dev
                         
-                        # Cek apakah composer ada, jika tidak, download lokal
-                        if ! command -v composer >/dev/null 2>&1; then
-                            echo "Composer tidak ditemukan, mengunduh composer.phar..."
-                            curl -sS https://getcomposer.org/installer | php
-                            chmod +x composer.phar
-                            mv composer.phar composer
-                        fi
+                        # Install Composer secara otomatis
+                        curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+                        
+                        cp "$ENV_PATH" .env
+                        composer install --no-interaction --optimize-autoloader
                     '''
                 }
             }
         }
 
-        stage('Install & Deploy') {
+stage('Run App') {
             steps {
-                script {
-                    sh '''
-                        # Gunakan composer lokal jika ada, jika tidak gunakan sistem
-                        COMPOSER_BIN=$(command -v ./composer || command -v composer)
-                        
-                        $COMPOSER_BIN install --no-interaction --optimize-autoloader
-                        
-                        export JENKINS_NODE_COOKIE=dontKillMe
-                        
-                        # Bersihkan port 9004
-                        fuser -k ${APP_PORT}/tcp || true
-                        
-                        # Jalankan Laravel
-                        nohup php artisan serve --host=0.0.0.0 --port=${APP_PORT} > laravel_logs.log 2>&1 &
-                        
-                        echo "Aplikasi berhasil dijalankan di background port ${APP_PORT}"
-                    '''
+                // Catatan: Di dalam Docker agent, proses akan mati jika stage selesai.
+                // Untuk 'serve' di background, biasanya kita menggunakan Docker Compose 
+                // atau membiarkannya tetap running di server host.
+                sh 'php artisan serve --host=0.0.0.0 --port=${APP_PORT} &'
             }
         }
     }
-}
 
     post {
         success {
