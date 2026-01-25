@@ -2,70 +2,68 @@ pipeline {
     agent any
 
     stages {
-        stage('Preparation') {
+        stage('Checkout') {
             steps {
-                // 1. Bersihkan workspace dari residu build sebelumnya
+                // Pastikan workspace bersih agar tidak ada folder hantu bernama .env
                 cleanWs()
-                
-                // 2. Ambil kode dari repository
                 checkout scm
             }
         }
 
-        stage('Setup Environment') {
+        stage('Secure Env Injection') {
             steps {
-                // Pastikan ID 'dramabox-auth-env' tipe-nya adalah "Secret File" di Jenkins
-                withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'ENV_PATH')]) {
+                // Mengambil file dari Jenkins Credentials (Kind: Secret File)
+                withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECRET_FILE_PATH')]) {
                     script {
-                        // Mendapatkan path absolut workspace
-                        def workspacePath = pwd()
+                        // Ambil path absolut workspace saat ini
+                        def wsPath = pwd()
                         
-                        echo "Mengambil env dari credentials..."
+                        echo "Copying secret file from: ${SECRET_FILE_PATH}"
                         
-                        // Eksekusi shell dengan penanganan error yang lebih baik
+                        // Perintah shell dengan pengecekan keberadaan file
                         sh """
-                            if [ -f "${ENV_PATH}" ]; then
-                                cp -f "${ENV_PATH}" "${workspacePath}/.env"
-                                echo "File .env berhasil disalin ke ${workspacePath}"
+                            # Hapus jika ada folder .env (penyebab error directory)
+                            rm -rf ${wsPath}/.env
+                            
+                            # Salin file rahasia ke file .env di workspace
+                            cp -f '${SECRET_FILE_PATH}' '${wsPath}/.env'
+                            
+                            # Validasi apakah file benar-benar sudah ada
+                            if [ -f '${wsPath}/.env' ]; then
+                                echo "SUCCESS: .env has been created in ${wsPath}"
+                                chmod 644 '${wsPath}/.env'
                             else
-                                echo "ERROR: File sumber dari credential tidak ditemukan!"
+                                echo "ERROR: Failed to create .env file"
                                 exit 1
                             fi
                         """
-                        
-                        // Verifikasi hasil akhir
-                        sh "ls -la .env"
                     }
                 }
             }
         }
 
-        stage('Laravel Build') {
+        stage('Laravel Dependencies') {
             steps {
-                // Gunakan single quotes untuk perintah Laravel standar
-                sh 'composer install --no-interaction --prefer-dist'
+                // Menjalankan perintah Laravel menggunakan file .env yang sudah siap
+                sh 'composer install --no-interaction --prefer-dist --optimize-autoloader'
+                
+                // Jika .env hasil copy tidak punya key, kita generate
                 sh 'php artisan key:generate --force'
             }
         }
 
-        stage('Test') {
+        stage('Execute Tests') {
             steps {
+                echo 'Running Drama Box Auth Test Suite...'
                 sh 'php artisan test'
             }
         }
     }
-}
 
     post {
         always {
-            // Menghapus file .env setelah build selesai agar tidak tertinggal di server Jenkins
+            // Hapus file sensitif setelah build selesai demi keamanan
             sh 'rm -f .env'
-        }
-        success {
-            echo "✅ Build Drama-Box-Auth Sukses!"
-        }
-        failure {
-            echo "❌ Build Gagal. Periksa log di atas."
         }
     }
 }
