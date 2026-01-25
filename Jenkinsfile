@@ -1,9 +1,3 @@
-Tentu, ini adalah langkah yang tepat. Menggunakan Pipeline dari SCM (Source Control Management) jauh lebih baik karena skrip pipeline (Jenkinsfile) tersimpan bersama kode aplikasi Anda.
-
-1. Buat File Jenkinsfile
-Buat file baru bernama Jenkinsfile (tanpa ekstensi) di root direktori repositori GitHub Anda (drama-box-auth), lalu tempelkan kode berikut:
-
-Groovy
 pipeline {
     agent any
 
