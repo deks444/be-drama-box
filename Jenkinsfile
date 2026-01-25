@@ -18,20 +18,34 @@ pipeline {
             }
         }
 
-        stage('Setup PHP 8.2.27 & Environment') {
+        stage('Setup PHP 8.4.14 (Official) & .env') {
             steps {
+                echo 'Mengunduh PHP 8.4.14 dari Mirror Resmi...'
                 withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECRET_ENV')]) {
                     script {
+                        // 1. Setup .env (Menangani folder dengan spasi)
                         sh 'rm -rf .env'
                         sh 'cat "${SECRET_ENV}" > .env'
 
+                        // 2. Download PHP 8.4.14 Static Binary
                         sh '''
                             mkdir -p local_bin
-                            URL="https://dl.static-php.dev/static-php-cli/common/php-8.2.27-cli-linux-x86_64.tar.gz"
+                            
+                            # Menggunakan link mirror resmi untuk PHP 8.4.14 CLI Linux x86_64
+                            URL="https://dl.static-php.dev/static-php-cli/common/php-8.4.14-cli-linux-x86_64.tar.gz"
+                            
                             curl -Lk "$URL" -o php.tar.gz
-                            tar -xzf php.tar.gz -C local_bin/
-                            find local_bin -name "php*" -type f -exec mv {} local_bin/php \\;
-                            chmod +x local_bin/php
+                            
+                            # Ekstrak dan standarisasi nama binary ke 'php'
+                            if tar -xzf php.tar.gz -C local_bin/; then
+                                find local_bin -name "php*" -type f -exec mv {} local_bin/php \\;
+                                chmod +x local_bin/php
+                                echo "PHP 8.4.14 Berhasil Terpasang:"
+                                ./local_bin/php -v
+                            else
+                                echo "ERROR: Gagal mengunduh PHP 8.4.14 dari mirror resmi (404)."
+                                exit 1
+                            fi
                         '''
                     }
                 }
@@ -40,47 +54,59 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
+                echo 'Installing Composer & Laravel Packages...'
                 sh '''
+                    # Download composer.phar versi stabil
                     curl -Lk https://getcomposer.org/composer.phar -o composer.phar
+                    
+                    # Install dependensi (ignore-platform-reqs untuk fleksibilitas environment)
                     ./local_bin/php composer.phar install --no-interaction --prefer-dist --optimize-autoloader --no-dev --ignore-platform-reqs
                 '''
             }
         }
 
-        stage('Laravel Prep & Migrate') {
+        stage('Laravel Preparation') {
             steps {
+                echo 'Preparing Laravel Application...'
                 sh '''
                     ./local_bin/php artisan key:generate --force
                     ./local_bin/php artisan storage:link
-                    ./local_bin/php artisan migrate --force || echo "Migrasi dilewati."
+                    ./local_bin/php artisan migrate --force || echo "Migrasi gagal atau database belum siap."
                     ./local_bin/php artisan config:cache
+                    ./local_bin/php artisan route:cache
+                    chmod -R 775 storage bootstrap/cache || true
                 '''
             }
         }
 
-        stage('Run Server on Port 9004') {
+        stage('Serve on Port 9004') {
             steps {
-                echo 'Memulai Laravel Server di port 9004...'
+                echo 'Menjalankan Laravel Server di port 9004...'
                 script {
-                    // Menghentikan proses yang mungkin berjalan di port 9004 sebelumnya
+                    // Membersihkan proses lama di port 9004 agar tidak 'Address already in use'
                     sh 'fuser -k 9004/tcp || true'
                     
-                    // Menjalankan Laravel server di background
-                    // JENKINS_NODE_COOKIE=dontKillMe penting agar proses tidak dimatikan saat pipeline selesai
+                    // Menjalankan server di background
+                    // dontKillMe mencegah Jenkins membunuh server saat build selesai
                     sh '''
                         export JENKINS_NODE_COOKIE=dontKillMe
                         nohup ./local_bin/php artisan serve --host=0.0.0.0 --port=9004 > laravel_log.txt 2>&1 &
                     '''
-                    echo 'Aplikasi berjalan di http://localhost:9004'
+                    echo 'Aplikasi berjalan di background (Port 9004)'
                 }
             }
         }
     }
 
     post {
+        always {
+            echo 'Pembersihan file installer...'
+            sh 'rm -f php.tar.gz composer.phar'
+        }
         success {
             echo '==================================================='
-            echo ' DEPLOY BERHASIL & BERJALAN DI PORT 9004           '
+            echo ' DEPLOY SUCCESS: DRAMA-BOX-AUTH RUNNING ON 9004    '
+            echo ' PHP VERSION: 8.4.14                               '
             echo '==================================================='
         }
     }
