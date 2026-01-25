@@ -1,48 +1,70 @@
 pipeline {
     agent any
-    
+
     triggers {
         githubPush()
     }
 
     environment {
-        DRAMABOX_AUTH = credentials('dramabox-auth-env')
         APP_PORT = '9004'
-        IMAGE_NAME = 'dramabox-app'
+        PHP_VERSION = '8.2' // Sesuaikan dengan versi PHP Anda
     }
 
     stages {
-        stage('Setup Docker Tool') {
+        stage('Checkout') {
             steps {
-                script {
-                    def dockerToolPath = tool name: 'docker-latest', type: 'dockerTool'
-                    env.PATH = "${dockerToolPath}/bin:${env.PATH}"
+                checkout scm
+            }
+        }
+
+        stage('Setup Environment') {
+            steps {
+                withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'ENV_FILE')]) {
+                    script {
+                        sh "cp ${ENV_FILE} .env"
+                        sh "sed -i 's/APP_PORT=.*/APP_PORT=${APP_PORT}/' .env"
+                    }
                 }
             }
         }
 
-        stage('Check Workspace') {
+        stage('Install Dependencies') {
             steps {
-                // Perintah ini untuk melihat daftar file yang ada di workspace saat ini
-                sh "ls -la" 
+                sh 'composer install --no-interaction --prefer-dist --optimize-autoloader'
+                sh 'npm install && npm run build'
             }
         }
 
-        stage('Deploy') {
+        stage('Database Migration') {
+            steps {
+                sh 'php artisan migrate --force'
+            }
+        }
+
+        stage('Deploy to Background (Port 9004)') {
             steps {
                 script {
-                    sh "docker stop ${IMAGE_NAME} || true && docker rm ${IMAGE_NAME} || true"
-                    
-                    // Kita asumsikan dramabox-auth-env berisi konten lengkap .env atau key tertentu
+                    // Menggunakan JENKINS_NODE_COOKIE=dontKillMe agar proses tidak mati setelah job selesai
                     sh """
-                        docker run -d \
-                        --name ${IMAGE_NAME} \
-                        -p 9004:9004 \
-                        -e APP_KEY=${DRAMABOX_AUTH} \
-                        ${IMAGE_NAME}:${BUILD_NUMBER}
+                        export JENKINS_NODE_COOKIE=dontKillMe
+                        
+                        # Menghentikan proses lama yang berjalan di port 9004 (jika ada)
+                        fuser -k ${APP_PORT}/tcp || true
+                        
+                        # Menjalankan server Laravel di background
+                        nohup php artisan serve --host=0.0.0.0 --port=${APP_PORT} > laravel_logs.log 2>&1 &
                     """
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo "Aplikasi berhasil berjalan di port ${APP_PORT} dalam mode background."
+        }
+        failure {
+            echo "Pipeline gagal. Silakan periksa log Jenkins."
         }
     }
 }
