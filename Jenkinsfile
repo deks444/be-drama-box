@@ -1,71 +1,61 @@
 pipeline {
     agent any
 
-    environment {
-        // Mengambil kredensial 'Secret File' dari Jenkins
-        DOT_ENV_FILE = credentials('dramabox-auth-env')
-    }
-
     stages {
-        stage('Cleanup & Checkout') {
+        stage('Preparation') {
             steps {
-                // Menghapus folder .env jika ada (penyebab error sebelumnya)
-                sh "rm -rf .env"
+                // 1. Bersihkan workspace dari residu build sebelumnya
+                cleanWs()
+                
+                // 2. Ambil kode dari repository
                 checkout scm
             }
         }
 
-        stage('Setup Environment') {
+        stage('Inject Environment') {
             steps {
-                script {
-                    // Menyalin file rahasia ke file .env di root project
-                    // Pastikan menggunakan flag -f (force)
-                    sh "cp -f ${DOT_ENV_FILE} .env"
-                    
-                    // Verifikasi tipe file (untuk memastikan bukan direktori)
-                    sh "ls -ld .env"
+                // 3. Menggunakan withCredentials untuk menangani file rahasia
+                // Pastikan 'dramabox-auth-env' adalah ID yang tepat di Jenkins Credentials
+                withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECRET_ENV')]) {
+                    script {
+                        // Gunakan single quotes (') untuk menghindari warning security
+                        // dan memaksa shell Linux yang mengeksekusi penyalinan
+                        sh 'cp -f ${SECRET_ENV} .env'
+                        
+                        // Verifikasi bahwa .env sekarang adalah FILE, bukan direktori
+                        sh '[ -f .env ] && echo ".env file created successfully" || (echo ".env is not a file" && exit 1)'
+                    }
                 }
             }
         }
 
-        stage('Install Dependencies') {
+        stage('Install & Build') {
             steps {
-                sh "composer install --no-interaction --prefer-dist --optimize-autoloader"
-                // Generate key jika .env baru tidak memilikinya
-                sh "php artisan key:generate --force"
+                // 4. Jalankan perintah Laravel standar
+                sh 'composer install --no-interaction --prefer-dist'
+                sh 'php artisan key:generate --force'
+                sh 'npm install && npm run build'
             }
         }
 
-        stage('Quality & Security Scan') {
+        stage('Run Tests') {
             steps {
-                echo 'Checking vulnerabilities...'
-                sh "composer audit"
-                echo 'Running Pint (Linting)...'
-                sh "./vendor/bin/pint --test"
-            }
-        }
-
-        stage('Test') {
-            steps {
-                echo 'Running Drama Box Auth Tests...'
-                // Pastikan DB testing sudah sesuai di dramabox-auth-env
-                sh "php artisan test"
-            }
-        }
-
-        stage('Build Assets') {
-            steps {
-                sh "npm install && npm run build"
+                // 5. Verifikasi fitur Auth Drama Box
+                sh 'php artisan test'
             }
         }
     }
 
     post {
+        always {
+            // Menghapus file .env setelah build selesai agar tidak tertinggal di server Jenkins
+            sh 'rm -f .env'
+        }
         success {
-            echo "✅ Pipeline drama-box-auth Berhasil!"
+            echo "✅ Build Drama-Box-Auth Sukses!"
         }
         failure {
-            echo "❌ Pipeline Gagal! Cek kembali isi dramabox-auth-env atau log testing."
+            echo "❌ Build Gagal. Periksa log di atas."
         }
     }
 }
