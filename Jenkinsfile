@@ -1,44 +1,71 @@
 pipeline {
-    agent {
-        docker {
-            image 'php:8.2-cli' // Menggunakan image PHP resmi
-            args '-p 9004:9004' // Membuka port agar bisa diakses
-        }
-    }
-    
-    triggers {
-        githubPush()
-    }
+    agent any
 
     environment {
-        APP_PORT = '9004'
+        // Mengambil file .env dari Jenkins Credentials
+        DOT_ENV_FILE = credentials('dramabox-auth-env')
+        APP_URL = "https://github.com/PTMajuJayaMakmur/drama-box-auth.git"
     }
 
     stages {
-        stage('Setup & Install') {
+        stage('Preparation') {
             steps {
-                withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'ENV_PATH')]) {
-                    sh '''
-                        # Install dependensi sistem yang diperlukan Laravel
-                        apt-get update && apt-get install -y unzip libpq-dev libcurl4-gnutls-dev
-                        
-                        # Install Composer secara otomatis
-                        curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-                        
-                        cp "$ENV_PATH" .env
-                        composer install --no-interaction --optimize-autoloader
-                    '''
-                }
+                echo 'Cleaning Workspace and Fetching Code...'
+                checkout scm
+                // Copy environment khusus dramabox-auth
+                sh "cp ${DOT_ENV_FILE} .env"
             }
         }
 
-        stage('Run App') {
+        stage('Install Dependencies') {
             steps {
-                // Catatan: Di dalam Docker agent, proses akan mati jika stage selesai.
-                // Untuk 'serve' di background, biasanya kita menggunakan Docker Compose 
-                // atau membiarkannya tetap running di server host.
-                sh 'php artisan serve --host=0.0.0.0 --port=${APP_PORT} &'
+                sh 'composer install --no-interaction --prefer-dist --optimize-autoloader'
+                sh 'npm install && npm run build'
             }
+        }
+
+        stage('Security & Quality Check') {
+            steps {
+                echo 'Checking for vulnerabilities...'
+                sh 'composer audit'
+                echo 'Running Static Analysis (Pint)...'
+                sh './vendor/bin/pint --test'
+            }
+        }
+
+        stage('Database Migration (Testing)') {
+            steps {
+                // Menjalankan migrasi di env testing (pastikan DB testing siap)
+                sh 'php artisan migrate --force'
+            }
+        }
+
+        stage('Run Unit Tests') {
+            steps {
+                echo 'Running Auth Service Tests...'
+                // Pastikan test suite untuk login/register berhasil 100%
+                sh 'php artisan test --parallel'
+            }
+        }
+
+        stage('Deploy to Staging') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo 'Deploying drama-box-auth to Staging Environment...'
+                // Contoh perintah deploy via SSH
+                // sh 'ssh user@server "cd /var/www/auth && git pull origin main && php artisan migrate --force"'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline Drama Box Auth Berhasil!'
+        }
+        failure {
+            echo 'Pipeline Gagal! Segera cek logs karena ini menyangkut layanan Auth.'
         }
     }
 }
