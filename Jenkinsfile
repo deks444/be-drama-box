@@ -1,11 +1,29 @@
 pipeline {
-    agent any
+    agent {
+        // Jenkins akan otomatis mendownload image yang sudah ada PHP & Composer
+        docker { 
+            image 'php:8.2-cli' 
+            args '-u root'
+        }
+    }
 
     stages {
         stage('Checkout') {
             steps {
                 cleanWs()
                 checkout scm
+            }
+        }
+
+        stage('Install Composer') {
+            steps {
+                script {
+                    // Download composer di dalam kontainer secara otomatis
+                    sh '''
+                        curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+                        composer --version
+                    '''
+                }
             }
         }
 
@@ -39,20 +57,19 @@ pipeline {
             }
         }
 
-        stage('Laravel Setup') {
+        stage('Install Dependencies') {
             steps {
-        sh '''
-            # Download composer local jika belum ada
-            if [ ! -f composer.phar ]; then
-                curl -sS https://getcomposer.org/installer | php
-            fi
-            
-            # Jalankan menggunakan php
-            php composer.phar install --no-interaction --prefer-dist
-            php artisan key:generate --force
-        '''
-    }
+                sh '''
+                    # Install ekstensi zip yang dibutuhkan composer (opsional tapi disarankan)
+                    apt-get update && apt-get install -y libzip-dev zip
+                    docker-php-ext-install zip
+                    
+                    composer install --no-interaction --prefer-dist
+                    php artisan key:generate --force
+                '''
+            }
         }
+
 
         stage('Testing') {
             steps {
