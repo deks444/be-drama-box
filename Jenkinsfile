@@ -9,16 +9,18 @@ pipeline {
 
     stage('Preparation') {
     steps {
-        echo 'Cleaning Workspace and Fetching Code...'
         checkout scm
-        
         script {
-            // Pastikan tidak ada folder bernama .env yang tidak sengaja terbuat
-            sh "rm -rf .env" 
+            // 1. Hapus jika ada sisa file/folder .env lama
+            sh 'rm -f .env'
+            sh 'rm -rf .env' 
+
+            // 2. Salin dari Secret File Jenkins
+            // Menggunakan copy file dari path rahasia Jenkins ke workspace
+            sh "cp -f ${DOT_ENV_FILE} .env"
             
-            // Gunakan double quotes agar variabel terbaca, 
-            // dan arahkan langsung ke nama file
-            sh "cp ${DOT_ENV_FILE} .env"
+            // 3. Verifikasi (Opsional - hanya untuk debug, jangan print konten di prod)
+            sh "ls -la .env" 
         }
     }
 }
