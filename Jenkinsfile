@@ -1,57 +1,30 @@
 pipeline {
     agent {
-        // Jenkins akan otomatis mendownload image yang sudah ada PHP & Composer
-        docker { 
-            image 'php:8.2-cli' 
+        docker {
+            // Menggunakan image yang sudah lengkap (PHP + Composer)
+            image 'serversideup/php:8.2-cli'
+            // Menjalankan sebagai root untuk menghindari masalah permission pada workspace
             args '-u root'
         }
     }
 
     stages {
-        stage('Checkout') {
+        stage('Preparation') {
             steps {
+                // Bersihkan workspace dari sisa build gagal
                 cleanWs()
                 checkout scm
             }
         }
 
-        stage('Install Composer') {
+        stage('Inject Environment') {
             steps {
-                script {
-                    // Download composer di dalam kontainer secara otomatis
-                    sh '''
-                        curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-                        composer --version
-                    '''
-                }
-            }
-        }
-
-        stage('Secure Env Injection') {
-            steps {
-                // Menggunakan withCredentials untuk menghindari warning Groovy Interpolation
-                withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECRET_FILE')]) {
+                // Pastikan ID 'dramabox-auth-env' sudah ada di Jenkins Credentials (Secret File)
+                withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECRET_ENV')]) {
                     script {
-                        // Gunakan single quotes (') pada sh untuk keamanan total
-                        // Kita gunakan double quotes pada variable shell ("$SECRET_FILE") 
-                        // untuk menangani spasi pada path workspace
-                        sh '''
-                            # Hapus jika ada folder/file .env lama
-                            rm -rf .env
-                            
-                            # Salin file menggunakan variable environment shell asli
-                            # Tambahkan tanda kutip pada target agar folder berspasi aman
-                            cp -f "$SECRET_FILE" .env
-                            
-                            # Validasi tanpa menampilkan path rahasia di echo
-                            if [ -f .env ]; then
-                                chmod 644 .env
-                                echo "File .env configured successfully."
-                            else
-                                echo "Failed to inject .env file."
-                                exit 1
-                            fi
-                        '''
+                        // Salin env secara aman ke workspace
+                        sh 'cp -f "$SECRET_ENV" .env'
+                        sh 'chmod 644 .env'
                     }
                 }
             }
@@ -60,21 +33,41 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 sh '''
-                    # Install ekstensi zip yang dibutuhkan composer (opsional tapi disarankan)
-                    apt-get update && apt-get install -y libzip-dev zip
-                    docker-php-ext-install zip
+                    # Karena menggunakan image serversideup, composer sudah tersedia
+                    composer install --no-interaction --prefer-dist --optimize-autoloader
                     
-                    composer install --no-interaction --prefer-dist
+                    # Generate key jika belum ada
                     php artisan key:generate --force
                 '''
             }
         }
 
+        stage('Security Scan') {
+            steps {
+                // Melakukan audit keamanan pada package composer
+                sh 'composer audit'
+            }
+        }
 
         stage('Testing') {
             steps {
+                echo 'Running Drama Box Auth Tests...'
+                // Menjalankan unit test Laravel di dalam container
                 sh 'php artisan test'
             }
+        }
+    }
+
+    post {
+        always {
+            // Hapus file sensitif sebelum container dimatikan
+            sh 'rm -f .env'
+        }
+        success {
+            echo "✅ Drama Box Auth: Build & Test Sukses!"
+        }
+        failure {
+            echo "❌ Drama Box Auth: Build Gagal. Cek log di atas."
         }
     }
 }
