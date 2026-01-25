@@ -29,13 +29,13 @@ pipeline {
                             echo "Mengunduh PHP..."
                             
                             # Coba download versi tar.gz (dengan flag -L dan -k untuk bypass SSL)
-                            curl -Lk "https://github.com/crazywhalecc/static-php-cli/releases/download/v1.6.4/php-8.2.16-cli-linux-x86_64.tar.gz" -o php.tar.gz
+                            curl -Lk "https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.0/spc-linux-x86_64.tar.gz" -o php.tar.gz
                             
                             if tar -xzf php.tar.gz -C local_bin/ 2>/dev/null; then
                                 echo "Ekstrak berhasil."
                             else
                                 echo "Ekstrak gagal. Mencoba download binary langsung (tanpa kompresi)..."
-                                curl -Lk "https://github.com/crazywhalecc/static-php-cli/releases/download/v1.6.4/php-8.2.16-micro-linux-x86_64" -o local_bin/php
+                                curl -Lk "https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.0/spc-linux-x86_64.tar.gz" -o local_bin/php
                             fi
                             
                             chmod +x local_bin/php
