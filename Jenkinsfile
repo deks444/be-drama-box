@@ -12,41 +12,49 @@ pipeline {
             }
         }
 
-        stage('Environment Fix') {
+        stage('Setup Environment') {
             steps {
-                // Gunakan id kredensial yang tepat: dramabox-auth-env
-                withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECURE_ENV_PATH')]) {
+                // Pastikan ID 'dramabox-auth-env' tipe-nya adalah "Secret File" di Jenkins
+                withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'ENV_PATH')]) {
                     script {
-                        // 1. Ambil path absolut workspace saat ini
-                        def workspace = pwd()
+                        // Mendapatkan path absolut workspace
+                        def workspacePath = pwd()
                         
-                        // 2. Gunakan single quotes agar aman dari Groovy Interpolation
-                        // Kita paksa copy ke path absolut workspace
-                        sh "cp -f '${SECURE_ENV_PATH}' ${workspace}/.env"
+                        echo "Mengambil env dari credentials..."
                         
-                        // 3. Verifikasi keberadaan file
-                        sh "ls -la ${workspace}/.env"
+                        // Eksekusi shell dengan penanganan error yang lebih baik
+                        sh """
+                            if [ -f "${ENV_PATH}" ]; then
+                                cp -f "${ENV_PATH}" "${workspacePath}/.env"
+                                echo "File .env berhasil disalin ke ${workspacePath}"
+                            else
+                                echo "ERROR: File sumber dari credential tidak ditemukan!"
+                                exit 1
+                            fi
+                        """
+                        
+                        // Verifikasi hasil akhir
+                        sh "ls -la .env"
                     }
                 }
             }
         }
 
-        stage('Install & Build') {
+        stage('Laravel Build') {
             steps {
-                // 4. Jalankan perintah Laravel standar
+                // Gunakan single quotes untuk perintah Laravel standar
                 sh 'composer install --no-interaction --prefer-dist'
                 sh 'php artisan key:generate --force'
-                sh 'npm install && npm run build'
             }
         }
 
-        stage('Run Tests') {
+        stage('Test') {
             steps {
-                // 5. Verifikasi fitur Auth Drama Box
                 sh 'php artisan test'
             }
         }
     }
+}
 
     post {
         always {
