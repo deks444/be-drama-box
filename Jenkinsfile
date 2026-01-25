@@ -5,7 +5,7 @@ pipeline {
             args '-p 9004:9004' // Membuka port agar bisa diakses
         }
     }
-
+    
     triggers {
         githubPush()
     }
@@ -15,14 +15,6 @@ pipeline {
     }
 
     stages {
-        stage('Checkout') {
-            steps {
-                cleanWs()
-                checkout scm
-            }
-        }
-
-        stages {
         stage('Setup & Install') {
             steps {
                 withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'ENV_PATH')]) {
@@ -40,22 +32,13 @@ pipeline {
             }
         }
 
-stage('Run App') {
+        stage('Run App') {
             steps {
                 // Catatan: Di dalam Docker agent, proses akan mati jika stage selesai.
                 // Untuk 'serve' di background, biasanya kita menggunakan Docker Compose 
                 // atau membiarkannya tetap running di server host.
                 sh 'php artisan serve --host=0.0.0.0 --port=${APP_PORT} &'
             }
-        }
-    }
-
-    post {
-        success {
-            echo "Aplikasi berhasil berjalan di port ${APP_PORT} dalam mode background."
-        }
-        failure {
-            echo "Pipeline gagal. Silakan periksa log Jenkins."
         }
     }
 }
