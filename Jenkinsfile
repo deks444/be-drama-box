@@ -3,44 +3,38 @@ pipeline {
 
     options {
         buildDiscarder(logRotator(numToKeepStr: '5'))
-        disableConcurrentBuilds()
+        timeout(time: 20, unit: 'MINUTES')
     }
 
     stages {
-        stage('Checkout') {
+        stage('Checkout SCM') {
             steps {
-                // Mengambil kode dari GitHub https://github.com/PTMajuJayaMakmur/drama-box-auth
+                // Mengambil kode dari GitHub
                 checkout scm
             }
         }
 
-        stage('Environment Setup') {
+        stage('Setup PHP & .env') {
             steps {
-                echo 'Setting up .env file...'
+                echo 'Setting up Portable PHP and Environment...'
                 withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECRET_ENV')]) {
                     script {
-                        // Menangani spasi folder dengan tanda kutip ganda dan 'cat'
+                        // 1. Tangani masalah spasi folder dan file .env
                         sh 'rm -rf .env'
                         sh 'cat "${SECRET_ENV}" > .env'
                         sh 'chmod 600 .env'
-                    }
-                }
-            }
-        }
 
-        stage('Check/Install Runtime') {
-            steps {
-                echo 'Checking for PHP and Composer...'
-                script {
-                    // Berusaha menginstall PHP jika user jenkins punya akses sudo/apt
-                    sh '''
-                        if ! command -v php >/dev/null 2>&1; then
-                            echo "PHP not found. Attempting to install..."
-                            (apt-get update && apt-get install -y php-cli php-mbstring php-xml php-zip php-curl unzip git) || \
-                            (sudo apt-get update && sudo apt-get install -y php-cli php-mbstring php-xml php-zip php-curl unzip git) || \
-                            echo "Warning: Automatic install failed. Ensure PHP is installed on the host."
-                        fi
-                    '''
+                        // 2. Unduh Static PHP (8.2) karena sistem Anda tidak punya PHP
+                        // Kita simpan di folder 'bin' lokal proyek
+                        sh '''
+                            mkdir -p local_bin
+                            if [ ! -f local_bin/php ]; then
+                                echo "Downloading static PHP binary..."
+                                curl -Lo local_bin/php https://github.com/crazywhalecc/static-php-cli/releases/download/v1.6.4/php-8.2.16-micro-linux-x86_64
+                                chmod +x local_bin/php
+                            fi
+                        '''
+                    }
                 }
             }
         }
@@ -49,10 +43,10 @@ pipeline {
             steps {
                 echo 'Installing Composer & Laravel Packages...'
                 script {
-                    // Download composer.phar secara lokal agar tidak bergantung pada system path
+                    // Jalankan composer menggunakan PHP portable yang baru diunduh
                     sh '''
-                        curl -sS https://getcomposer.org/installer | php
-                        php composer.phar install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+                        curl -sS https://getcomposer.org/installer | ./local_bin/php
+                        ./local_bin/php composer.phar install --no-interaction --prefer-dist --optimize-autoloader --no-dev
                     '''
                 }
             }
@@ -60,10 +54,10 @@ pipeline {
 
         stage('Laravel Preparation') {
             steps {
-                echo 'Finalizing Laravel Setup...'
+                echo 'Running Artisan commands...'
                 sh '''
-                    php artisan key:generate --force
-                    php artisan storage:link
+                    ./local_bin/php artisan key:generate --force
+                    ./local_bin/php artisan storage:link
                     chmod -R 775 storage bootstrap/cache
                 '''
             }
@@ -71,12 +65,13 @@ pipeline {
 
         stage('Database & Optimization') {
             steps {
-                echo 'Running Migrations and Caching...'
+                echo 'Migrating and Caching...'
                 sh '''
-                    php artisan migrate --force
-                    php artisan config:cache
-                    php artisan route:cache
-                    php artisan view:cache
+                    # Pastikan koneksi DB di .env sudah benar sebelum migrasi
+                    ./local_bin/php artisan migrate --force
+                    ./local_bin/php artisan config:cache
+                    ./local_bin/php artisan route:cache
+                    ./local_bin/php artisan view:cache
                 '''
             }
         }
