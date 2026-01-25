@@ -7,15 +7,21 @@ pipeline {
         APP_URL = "https://github.com/PTMajuJayaMakmur/drama-box-auth.git"
     }
 
-    stages {
-        stage('Preparation') {
-            steps {
-                echo 'Cleaning Workspace and Fetching Code...'
-                checkout scm
-                // Copy environment khusus dramabox-auth
-                sh "cp ${DOT_ENV_FILE} .env"
-            }
+    stage('Preparation') {
+    steps {
+        echo 'Cleaning Workspace and Fetching Code...'
+        checkout scm
+        
+        script {
+            // Pastikan tidak ada folder bernama .env yang tidak sengaja terbuat
+            sh "rm -rf .env" 
+            
+            // Gunakan double quotes agar variabel terbaca, 
+            // dan arahkan langsung ke nama file
+            sh "cp ${DOT_ENV_FILE} .env"
         }
+    }
+}
 
         stage('Install Dependencies') {
             steps {
