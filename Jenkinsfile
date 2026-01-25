@@ -54,7 +54,6 @@ pipeline {
                         
                         echo "Aplikasi berjalan di background pada port ${APP_PORT}"
                     '''
-                }
             }
         }
     }
