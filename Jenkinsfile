@@ -1,29 +1,15 @@
 pipeline {
-    agent {
-        // Menggunakan Docker agar Jenkins tidak perlu install PHP secara manual
-        docker {
-            image 'php:8.2-cli' // Sesuaikan dengan versi Laravel Anda (8.1/8.2/8.3)
-            args '-u root'      // Menjalankan sebagai root agar tidak ada masalah izin file
-        }
-    }
+    agent any
 
     options {
         buildDiscarder(logRotator(numToKeepStr: '5'))
         disableConcurrentBuilds()
-        timeout(time: 15, unit: 'MINUTES')
     }
 
     stages {
-        stage('Initialize') {
-            steps {
-                echo 'Installing system dependencies...'
-                // Laravel memerlukan unzip dan git untuk composer
-                sh 'apt-get update && apt-get install -y unzip git libpng-dev libonig-dev libxml2-dev'
-            }
-        }
-
         stage('Checkout') {
             steps {
+                // Mengambil kode dari GitHub https://github.com/PTMajuJayaMakmur/drama-box-auth
                 checkout scm
             }
         }
@@ -33,7 +19,7 @@ pipeline {
                 echo 'Setting up .env file...'
                 withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECRET_ENV')]) {
                     script {
-                        // Menangani spasi pada path dengan kutip ganda
+                        // Menangani spasi folder dengan tanda kutip ganda dan 'cat'
                         sh 'rm -rf .env'
                         sh 'cat "${SECRET_ENV}" > .env'
                         sh 'chmod 600 .env'
@@ -42,53 +28,70 @@ pipeline {
             }
         }
 
-        stage('Install Composer') {
+        stage('Check/Install Runtime') {
             steps {
-                echo 'Installing Composer and Dependencies...'
+                echo 'Checking for PHP and Composer...'
                 script {
-                    // Download composer lokal karena di image php:cli biasanya belum ada
-                    sh 'curl -sS https://getcomposer.org/installer | php'
-                    sh 'php composer.phar install --no-interaction --prefer-dist --optimize-autoloader --no-dev'
+                    // Berusaha menginstall PHP jika user jenkins punya akses sudo/apt
+                    sh '''
+                        if ! command -v php >/dev/null 2>&1; then
+                            echo "PHP not found. Attempting to install..."
+                            (apt-get update && apt-get install -y php-cli php-mbstring php-xml php-zip php-curl unzip git) || \
+                            (sudo apt-get update && sudo apt-get install -y php-cli php-mbstring php-xml php-zip php-curl unzip git) || \
+                            echo "Warning: Automatic install failed. Ensure PHP is installed on the host."
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                echo 'Installing Composer & Laravel Packages...'
+                script {
+                    // Download composer.phar secara lokal agar tidak bergantung pada system path
+                    sh '''
+                        curl -sS https://getcomposer.org/installer | php
+                        php composer.phar install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+                    '''
                 }
             }
         }
 
         stage('Laravel Preparation') {
             steps {
-                echo 'Optimizing Laravel...'
-                script {
-                    // Pastikan folder-folder penting tersedia
-                    sh 'mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache'
-                    sh 'php artisan key:generate --force'
-                    sh 'php artisan storage:link'
-                    sh 'chmod -R 777 storage bootstrap/cache'
-                }
+                echo 'Finalizing Laravel Setup...'
+                sh '''
+                    php artisan key:generate --force
+                    php artisan storage:link
+                    chmod -R 775 storage bootstrap/cache
+                '''
             }
         }
 
-        stage('Database Migration') {
+        stage('Database & Optimization') {
             steps {
-                echo 'Running Migrations...'
-                // Gunakan --force untuk produksi
-                sh 'php artisan migrate --force'
-            }
-        }
-
-        stage('Cache & Optimize') {
-            steps {
-                sh 'php artisan config:cache'
-                sh 'php artisan route:cache'
-                sh 'php artisan view:cache'
+                echo 'Running Migrations and Caching...'
+                sh '''
+                    php artisan migrate --force
+                    php artisan config:cache
+                    php artisan route:cache
+                    php artisan view:cache
+                '''
             }
         }
     }
 
     post {
         success {
-            echo 'Drama Box Auth Deployed Successfully!'
+            echo '====================================='
+            echo ' DEPLOYMENT DRAMA-BOX-AUTH SUCCESS!  '
+            echo '====================================='
         }
         failure {
-            echo 'Deployment Failed. Check the logs above.'
+            echo '====================================='
+            echo ' DEPLOYMENT FAILED! CHECK LOGS ABOVE '
+            echo '====================================='
         }
     }
 }
