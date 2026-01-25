@@ -7,13 +7,13 @@ pipeline {
 
     environment {
         APP_PORT = '9004'
-        PHP_VERSION = '8.2' // Sesuaikan dengan versi PHP Anda
+        // Menambahkan lokasi umum bin ke PATH (sesuaikan jika perlu)
+        PATH = "/usr/local/bin:/usr/bin:/bin:${env.PATH}"
     }
 
     stages {
         stage('Checkout') {
             steps {
-                // Memastikan workspace bersih sebelum mulai
                 cleanWs()
                 checkout scm
             }
@@ -21,16 +21,16 @@ pipeline {
 
         stage('Setup Environment') {
             steps {
-                // Menggunakan double quotes untuk Jenkins, tapi single quotes untuk 'sh' 
-                // agar variabel dihandle oleh Shell, bukan Groovy.
                 withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'ENV_PATH')]) {
                     sh '''
-                        if [ -f "$ENV_PATH" ]; then
-                            cp "$ENV_PATH" .env
-                            echo "File .env berhasil disalin."
-                        else
-                            echo "Error: Source credential file tidak ditemukan!"
-                            exit 1
+                        cp "$ENV_PATH" .env
+                        
+                        # Cek apakah composer ada, jika tidak, download lokal
+                        if ! command -v composer >/dev/null 2>&1; then
+                            echo "Composer tidak ditemukan, mengunduh composer.phar..."
+                            curl -sS https://getcomposer.org/installer | php
+                            chmod +x composer.phar
+                            mv composer.phar composer
                         fi
                     '''
                 }
@@ -40,20 +40,23 @@ pipeline {
         stage('Install & Deploy') {
             steps {
                 script {
-                    // Menggabungkan install dan run untuk memastikan context direktori sama
                     sh '''
-                        composer install --no-interaction --optimize-autoloader
+                        # Gunakan composer lokal jika ada, jika tidak gunakan sistem
+                        COMPOSER_BIN=$(command -v ./composer || command -v composer)
+                        
+                        $COMPOSER_BIN install --no-interaction --optimize-autoloader
                         
                         export JENKINS_NODE_COOKIE=dontKillMe
                         
-                        # Kill proses lama di port 9004 jika ada
+                        # Bersihkan port 9004
                         fuser -k ${APP_PORT}/tcp || true
                         
-                        # Jalankan di background
+                        # Jalankan Laravel
                         nohup php artisan serve --host=0.0.0.0 --port=${APP_PORT} > laravel_logs.log 2>&1 &
                         
-                        echo "Aplikasi berjalan di background pada port ${APP_PORT}"
+                        echo "Aplikasi berhasil dijalankan di background port ${APP_PORT}"
                     '''
+                }
             }
         }
     }
