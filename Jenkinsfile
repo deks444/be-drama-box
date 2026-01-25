@@ -3,39 +3,42 @@ pipeline {
 
     options {
         buildDiscarder(logRotator(numToKeepStr: '5'))
-        disableConcurrentBuilds()
         timeout(time: 15, unit: 'MINUTES')
     }
 
     stages {
         stage('Checkout') {
             steps {
-                // Mengambil kode dari GitHub
+                // Mengambil kode dari repo GitHub
                 checkout scm
             }
         }
 
-        stage('Setup Environment & Portable PHP') {
+        stage('Setup Environment & PHP') {
             steps {
-                echo 'Configuring .env and downloading runtime...'
+                echo 'Setting up .env and Portable Runtime...'
                 withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECRET_ENV')]) {
                     script {
-                        // Menangani spasi pada path dan kredensial .env
+                        // 1. Setup .env (Menangani spasi folder dengan kutip ganda)
                         sh 'rm -rf .env'
                         sh 'cat "${SECRET_ENV}" > .env'
 
-                        // Mengunduh PHP Static Binary yang stabil (v8.2.16)
-                        // Menggunakan -L untuk mengikuti redirect GitHub
+                        // 2. Download PHP dengan Fallback Mechanism
                         sh '''
                             mkdir -p local_bin
-                            echo "Downloading PHP binary..."
-                            curl -L "https://github.com/crazywhalecc/static-php-cli/releases/download/v1.6.4/php-8.2.16-cli-linux-x86_64.tar.gz" -o php.tar.gz
+                            echo "Mengunduh PHP..."
                             
-                            # Ekstrak file dan pastikan binary bisa dijalankan
-                            tar -xzf php.tar.gz -C local_bin/
+                            # Coba download versi tar.gz (dengan flag -L dan -k untuk bypass SSL)
+                            curl -Lk "https://github.com/crazywhalecc/static-php-cli/releases/download/v1.6.4/php-8.2.16-cli-linux-x86_64.tar.gz" -o php.tar.gz
+                            
+                            if tar -xzf php.tar.gz -C local_bin/ 2>/dev/null; then
+                                echo "Ekstrak berhasil."
+                            else
+                                echo "Ekstrak gagal. Mencoba download binary langsung (tanpa kompresi)..."
+                                curl -Lk "https://github.com/crazywhalecc/static-php-cli/releases/download/v1.6.4/php-8.2.16-micro-linux-x86_64" -o local_bin/php
+                            fi
+                            
                             chmod +x local_bin/php
-                            
-                            # Test eksekusi PHP
                             ./local_bin/php -v
                         '''
                     }
@@ -45,37 +48,32 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
-                echo 'Installing Composer and Laravel Packages...'
+                echo 'Installing Composer & Laravel Packages...'
                 sh '''
-                    # Download installer composer
-                    curl -sS https://getcomposer.org/installer -o composer-setup.php
+                    # Download composer.phar langsung (lebih stabil daripada installer)
+                    curl -Lk https://getcomposer.org/download/latest-stable/composer.phar -o composer.phar
                     
-                    # Install composer lokal
-                    ./local_bin/php composer-setup.php
-                    
-                    # Install dependensi Laravel (Ignore platform reqs karena env terbatas)
+                    # Jalankan install dengan ignore-platform-reqs
                     ./local_bin/php composer.phar install --no-interaction --prefer-dist --optimize-autoloader --no-dev --ignore-platform-reqs
                 '''
             }
         }
 
-        stage('Laravel Finalization') {
+        stage('Laravel Finalize') {
             steps {
-                echo 'Optimizing Laravel Application...'
+                echo 'Finalizing Laravel Setup...'
                 sh '''
-                    # Jalankan artisan menggunakan PHP portable
                     ./local_bin/php artisan key:generate --force
                     ./local_bin/php artisan storage:link
                     
-                    # Jalankan migrasi jika database sudah terhubung di .env
-                    ./local_bin/php artisan migrate --force || echo "Migrasi dilewati atau gagal."
+                    # Jalankan migrasi jika DB sudah siap
+                    ./local_bin/php artisan migrate --force || echo "Migrasi gagal/lewati."
                     
-                    # Optimasi cache
+                    # Optimasi Cache
                     ./local_bin/php artisan config:cache
                     ./local_bin/php artisan route:cache
-                    ./local_bin/php artisan view:cache
                     
-                    # Set izin folder (tidak akan gagal jika permission denied)
+                    # Set permission (abaikan jika permission denied)
                     chmod -R 775 storage bootstrap/cache || true
                 '''
             }
@@ -85,17 +83,12 @@ pipeline {
     post {
         always {
             echo 'Cleaning up temporary files...'
-            sh 'rm -f php.tar.gz composer-setup.php composer.phar'
+            sh 'rm -f php.tar.gz composer.phar'
         }
         success {
-            echo '============================================='
-            echo ' DEPLOYMENT DRAMA-BOX-AUTH SUCCESSFUL!       '
-            echo '============================================='
-        }
-        failure {
-            echo '============================================='
-            echo ' DEPLOYMENT FAILED. CHECK CONSOLE LOGS.      '
-            echo '============================================='
+            echo "=========================================="
+            echo " DEPLOYMENT DRAMA-BOX-AUTH BERHASIL!      "
+            echo "=========================================="
         }
     }
 }
