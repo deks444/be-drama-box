@@ -2,78 +2,70 @@ pipeline {
     agent any
 
     environment {
-        // Mengambil file .env dari Jenkins Credentials
+        // Mengambil kredensial 'Secret File' dari Jenkins
         DOT_ENV_FILE = credentials('dramabox-auth-env')
-        APP_URL = "https://github.com/PTMajuJayaMakmur/drama-box-auth.git"
     }
 
-    stage('Preparation') {
-    steps {
-        checkout scm
-        script {
-            // 1. Hapus jika ada sisa file/folder .env lama
-            sh 'rm -f .env'
-            sh 'rm -rf .env' 
-
-            // 2. Salin dari Secret File Jenkins
-            // Menggunakan copy file dari path rahasia Jenkins ke workspace
-            sh "cp -f ${DOT_ENV_FILE} .env"
-            
-            // 3. Verifikasi (Opsional - hanya untuk debug, jangan print konten di prod)
-            sh "ls -la .env" 
+    stages {
+        stage('Cleanup & Checkout') {
+            steps {
+                // Menghapus folder .env jika ada (penyebab error sebelumnya)
+                sh "rm -rf .env"
+                checkout scm
+            }
         }
-    }
-}
+
+        stage('Setup Environment') {
+            steps {
+                script {
+                    // Menyalin file rahasia ke file .env di root project
+                    // Pastikan menggunakan flag -f (force)
+                    sh "cp -f ${DOT_ENV_FILE} .env"
+                    
+                    // Verifikasi tipe file (untuk memastikan bukan direktori)
+                    sh "ls -ld .env"
+                }
+            }
+        }
 
         stage('Install Dependencies') {
             steps {
-                sh 'composer install --no-interaction --prefer-dist --optimize-autoloader'
-                sh 'npm install && npm run build'
+                sh "composer install --no-interaction --prefer-dist --optimize-autoloader"
+                // Generate key jika .env baru tidak memilikinya
+                sh "php artisan key:generate --force"
             }
         }
 
-        stage('Security & Quality Check') {
+        stage('Quality & Security Scan') {
             steps {
-                echo 'Checking for vulnerabilities...'
-                sh 'composer audit'
-                echo 'Running Static Analysis (Pint)...'
-                sh './vendor/bin/pint --test'
+                echo 'Checking vulnerabilities...'
+                sh "composer audit"
+                echo 'Running Pint (Linting)...'
+                sh "./vendor/bin/pint --test"
             }
         }
 
-        stage('Database Migration (Testing)') {
+        stage('Test') {
             steps {
-                // Menjalankan migrasi di env testing (pastikan DB testing siap)
-                sh 'php artisan migrate --force'
+                echo 'Running Drama Box Auth Tests...'
+                // Pastikan DB testing sudah sesuai di dramabox-auth-env
+                sh "php artisan test"
             }
         }
 
-        stage('Run Unit Tests') {
+        stage('Build Assets') {
             steps {
-                echo 'Running Auth Service Tests...'
-                // Pastikan test suite untuk login/register berhasil 100%
-                sh 'php artisan test --parallel'
-            }
-        }
-
-        stage('Deploy to Staging') {
-            when {
-                branch 'main'
-            }
-            steps {
-                echo 'Deploying drama-box-auth to Staging Environment...'
-                // Contoh perintah deploy via SSH
-                // sh 'ssh user@server "cd /var/www/auth && git pull origin main && php artisan migrate --force"'
+                sh "npm install && npm run build"
             }
         }
     }
 
     post {
         success {
-            echo 'Pipeline Drama Box Auth Berhasil!'
+            echo "✅ Pipeline drama-box-auth Berhasil!"
         }
         failure {
-            echo 'Pipeline Gagal! Segera cek logs karena ini menyangkut layanan Auth.'
+            echo "❌ Pipeline Gagal! Cek kembali isi dramabox-auth-env atau log testing."
         }
     }
 }
