@@ -3,32 +3,39 @@ pipeline {
 
     options {
         buildDiscarder(logRotator(numToKeepStr: '5'))
+        disableConcurrentBuilds()
         timeout(time: 15, unit: 'MINUTES')
     }
 
     stages {
         stage('Checkout') {
             steps {
+                // Mengambil kode dari GitHub
                 checkout scm
             }
         }
 
         stage('Setup Environment & Portable PHP') {
             steps {
+                echo 'Configuring .env and downloading runtime...'
                 withCredentials([file(credentialsId: 'dramabox-auth-env', variable: 'SECRET_ENV')]) {
                     script {
-                        // 1. Setup .env dengan kutip ganda untuk menangani spasi folder
+                        // Menangani spasi pada path dan kredensial .env
                         sh 'rm -rf .env'
                         sh 'cat "${SECRET_ENV}" > .env'
 
-                        // 2. Download Static PHP yang benar-benar stabil (dari static-php-cli)
-                        echo "Mengunduh PHP Portable..."
+                        // Mengunduh PHP Static Binary yang stabil (v8.2.16)
+                        // Menggunakan -L untuk mengikuti redirect GitHub
                         sh '''
                             mkdir -p local_bin
-                            # Mengunduh PHP 8.2 static binary
-                            curl -Lo php.tar.gz https://github.com/crazywhalecc/static-php-cli/releases/download/v1.6.4/php-8.2.16-cli-linux-x86_64.tar.gz
+                            echo "Downloading PHP binary..."
+                            curl -L "https://github.com/crazywhalecc/static-php-cli/releases/download/v1.6.4/php-8.2.16-cli-linux-x86_64.tar.gz" -o php.tar.gz
+                            
+                            # Ekstrak file dan pastikan binary bisa dijalankan
                             tar -xzf php.tar.gz -C local_bin/
                             chmod +x local_bin/php
+                            
+                            # Test eksekusi PHP
                             ./local_bin/php -v
                         '''
                     }
@@ -36,40 +43,40 @@ pipeline {
             }
         }
 
-        stage('Install Composer') {
+        stage('Install Dependencies') {
             steps {
-                echo 'Installing Composer...'
+                echo 'Installing Composer and Laravel Packages...'
                 sh '''
-                    # Download installer composer menggunakan PHP portable
+                    # Download installer composer
                     curl -sS https://getcomposer.org/installer -o composer-setup.php
+                    
+                    # Install composer lokal
                     ./local_bin/php composer-setup.php
                     
-                    # Jalankan install. Tambahkan --ignore-platform-reqs jika env Jenkins sangat terbatas
+                    # Install dependensi Laravel (Ignore platform reqs karena env terbatas)
                     ./local_bin/php composer.phar install --no-interaction --prefer-dist --optimize-autoloader --no-dev --ignore-platform-reqs
                 '''
             }
         }
 
-        stage('Laravel Preparation') {
+        stage('Laravel Finalization') {
             steps {
-                echo 'Running Artisan Tasks...'
+                echo 'Optimizing Laravel Application...'
                 sh '''
+                    # Jalankan artisan menggunakan PHP portable
                     ./local_bin/php artisan key:generate --force
                     ./local_bin/php artisan storage:link
                     
-                    # Kita coba chmod, jika gagal karena permission kita abaikan (continue-on-error)
-                    chmod -R 775 storage bootstrap/cache || true
-                '''
-            }
-        }
-
-        stage('Optimization & Database') {
-            steps {
-                echo 'Finalizing...'
-                sh '''
-                    ./local_bin/php artisan migrate --force || echo "Migration failed, check DB connection"
+                    # Jalankan migrasi jika database sudah terhubung di .env
+                    ./local_bin/php artisan migrate --force || echo "Migrasi dilewati atau gagal."
+                    
+                    # Optimasi cache
                     ./local_bin/php artisan config:cache
                     ./local_bin/php artisan route:cache
+                    ./local_bin/php artisan view:cache
+                    
+                    # Set izin folder (tidak akan gagal jika permission denied)
+                    chmod -R 775 storage bootstrap/cache || true
                 '''
             }
         }
@@ -77,11 +84,18 @@ pipeline {
 
     post {
         always {
-            // Bersihkan file installer untuk menghemat ruang
-            sh 'rm -f php.tar.gz composer-setup.php'
+            echo 'Cleaning up temporary files...'
+            sh 'rm -f php.tar.gz composer-setup.php composer.phar'
         }
         success {
-            echo "Deployment DRAMA-BOX-AUTH Berhasil!"
+            echo '============================================='
+            echo ' DEPLOYMENT DRAMA-BOX-AUTH SUCCESSFUL!       '
+            echo '============================================='
+        }
+        failure {
+            echo '============================================='
+            echo ' DEPLOYMENT FAILED. CHECK CONSOLE LOGS.      '
+            echo '============================================='
         }
     }
 }
